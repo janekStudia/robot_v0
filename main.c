@@ -1,20 +1,21 @@
-#include "driver/gpio.h"
+#include <stdio.h>
+#include <fcntl.h>
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "driver/gpio.h"
 #include "driver/ledc.h"
+#include "driver/uart.h"
 #include "esp_err.h"
 
 // pins configuration
 #define PWM_MA_GPIO GPIO_NUM_23
-#define PWM_MB_GPIO GPIO_NUM_18
-
-#define AIN1_MC_PIN GPIO_NUM_1
 #define AIN2_MC_PIN GPIO_NUM_22
-
-#define BIN1_MC_PIN GPIO_NUM_21
-#define BIN2_MC_PIN GPIO_NUM_19
-
-#define STBY_MC_PIN GPIO_NUM_3
+#define AIN1_MC_PIN GPIO_NUM_21
+#define STBY_MC_PIN GPIO_NUM_19
+#define BIN1_MC_PIN GPIO_NUM_18
+#define BIN2_MC_PIN GPIO_NUM_5
+#define PWM_MB_GPIO GPIO_NUM_4
 
 // motor control mask
 #define MC_OUTPUT_PINS_MASK ((1ULL << AIN1_MC_PIN) | \
@@ -30,12 +31,14 @@
 #define PWM_MA_CHANNEL LEDC_CHANNEL_0
 #define PWM_MB_CHANNEL LEDC_CHANNEL_1
 
-void sleep_motors(){
-    gpio_set_level(STBY_MC_PIN, 0);
+void sleep_motors()
+{
+  gpio_set_level(STBY_MC_PIN, 0);
 }
 
-void wake_up_motors(){
-    gpio_set_level(STBY_MC_PIN, 1);
+void wake_up_motors()
+{
+  gpio_set_level(STBY_MC_PIN, 1);
 }
 
 void init_dual_pwm(void)
@@ -90,8 +93,8 @@ void init_motor_control(void)
 
   init_dual_pwm();
 
-  gpio_set_level(AIN1_MC_PIN, 1);
-  gpio_set_level(AIN2_MC_PIN, 0);
+  gpio_set_level(AIN1_MC_PIN, 0);
+  gpio_set_level(AIN2_MC_PIN, 1);
 
   gpio_set_level(BIN1_MC_PIN, 1);
   gpio_set_level(BIN2_MC_PIN, 0);
@@ -112,23 +115,58 @@ void set_motors_duty(uint32_t duty_A, uint32_t duty_B)
 extern void app_main(void)
 {
   init_motor_control();
-  uint32_t licznik = 0;
-  uint32_t wartosci_duty_A[4] = {1, 256, 512, 1023};
-  uint32_t wartosci_duty_B[4] = {1023, 512, 256, 1};
+  fcntl(fileno(stdin), F_SETFL, O_NONBLOCK);
 
-sleep_motors();
+  uint32_t duty_AB = 1;
+  sleep_motors();
 
+  // sleep_motors();
   while (true)
   {
-    if (licznik > 4)
+    int32_t c = getchar();
+    switch (c)
     {
-      licznik = 0;
+    case (int)'1':
+      duty_AB = 100;
+      break;
+    case (int)'2':
+      duty_AB = 200;
+      break;
+    case (int)'3':
+      duty_AB = 300;
+      break;
+    case (int)'4':
+      duty_AB = 400;
+      break;
+    case (int)'5':
+      duty_AB = 500;
+      break;
+    case (int)'6':
+      duty_AB = 600;
+      break;
+    case (int)'7':
+      duty_AB = 700;
+      break;
+    case (int)'8':
+      duty_AB = 800;
+      break;
+    case (int)'9':
+      duty_AB = 1023;
+      break;
+
+    case (int)'s':
+      sleep_motors();
+      break;
+    case (int)'w':
+      wake_up_motors();
+      break;
+
+    default:
+      break;
     }
 
-    set_motors_duty(wartosci_duty_A[licznik], wartosci_duty_B[licznik]);
-    // set_motors_duty(512, 512);
-
-    vTaskDelay(pdMS_TO_TICKS(1000));
-    licznik++;
+    set_motors_duty(duty_AB, duty_AB);
+    printf("[DEBUG]: duty value = %ld\n", duty_AB);
+    vTaskDelay(pdMS_TO_TICKS(100));
   }
 }
