@@ -3,10 +3,16 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "driver/uart.h"
+
 #include "esp_err.h"
+
+#include "esp_adc/adc_oneshot.h"
+#include "esp_adc/adc_cali.h"
+#include "esp_adc/adc_cali_scheme.h"
 
 // pins configuration
 #define PWM_MA_GPIO GPIO_NUM_23
@@ -112,8 +118,49 @@ void set_motors_duty(uint32_t duty_A, uint32_t duty_B)
   ledc_update_duty(LEDC_MODE, PWM_MB_CHANNEL);
 }
 
+adc_cali_handle_t calibrate_battery_sensor()
+{
+  adc_cali_handle_t adc1_cali_handle = NULL;
+
+  adc_cali_line_fitting_config_t cali_cfg = {
+      .unit_id = ADC_UNIT_1,
+      .atten = ADC_ATTEN_DB_12,
+      .bitwidth = ADC_BITWIDTH_DEFAULT,
+  };
+  ESP_ERROR_CHECK(adc_cali_create_scheme_line_fitting(&cali_cfg, &adc1_cali_handle));
+  return adc1_cali_handle;
+}
+
+adc_oneshot_unit_handle_t init_battery_sensor()
+{
+  adc_oneshot_unit_handle_t adc1_handle;
+  adc_oneshot_unit_init_cfg_t init_cfg1 = {
+      .unit_id = ADC_UNIT_1,
+  };
+  ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_cfg1, &adc1_handle));
+
+  adc_oneshot_chan_cfg_t config = {
+      .bitwidth = ADC_BITWIDTH_DEFAULT,
+      .atten = ADC_ATTEN_DB_12, // 0 - 3.3V
+  };
+  ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, ADC_CHANNEL_6, &config));
+  return adc1_handle;
+}
+
+int read_battery_level(adc_oneshot_unit_handle_t adc1_handle, adc_cali_handle_t adc1_cali_handle)
+{
+  int raw_adc;
+  int voltage_mV;
+  adc_oneshot_read(adc1_handle, ADC_CHANNEL_6, &raw_adc);
+  adc_cali_raw_to_voltage(adc1_cali_handle, raw_adc, &voltage_mV);
+  return voltage_mV;
+}
+
 extern void app_main(void)
 {
+  adc_oneshot_unit_handle_t adc1_handle = init_battery_sensor();
+  adc_cali_handle_t adc1_cali_handle = calibrate_battery_sensor();
+
   init_motor_control();
   fcntl(fileno(stdin), F_SETFL, O_NONBLOCK);
 
@@ -123,6 +170,8 @@ extern void app_main(void)
   // sleep_motors();
   while (true)
   {
+    printf("[BATTERY_LEVEL]: voltage[mV] = %d\n", read_battery_level(adc1_handle, adc1_cali_handle));
+
     int32_t c = getchar();
     switch (c)
     {
@@ -166,7 +215,7 @@ extern void app_main(void)
     }
 
     set_motors_duty(duty_AB, duty_AB);
-    printf("[DEBUG]: duty value = %ld\n", duty_AB);
+    // printf("[DEBUG]: duty value = %ld\n", duty_AB);
     vTaskDelay(pdMS_TO_TICKS(100));
   }
 }
