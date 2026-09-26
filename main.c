@@ -156,12 +156,45 @@ int read_battery_voltage_mV(adc_oneshot_unit_handle_t adc1_handle, adc_cali_hand
   return voltage_mV;
 }
 
-int get_battery_proc_from_voltage(int voltage_mV)
+int get_soc_from_voltage(int voltage_mV)
 {
-  // TODO zrobic tu lookup table
-  // liniowo 8.4V (8400mV) max -> dzielnik 3 (2800mV)
-  // 6V (6000mV) min -> dzielnik 3 (2000mV)
-  return voltage_mV < 2000 ? 0 : (voltage_mV - 2000) / 800;
+  const int dzielnik = 3;
+  int lookup_soc[][2] = {
+      {6000 / dzielnik, 0},
+      {6900 / dzielnik, 10},
+      {7200 / dzielnik, 20},
+      {7360 / dzielnik, 30},
+      {7460 / dzielnik, 40},
+      {7560 / dzielnik, 50},
+      {7680 / dzielnik, 60},
+      {7800 / dzielnik, 70},
+      {7960 / dzielnik, 80},
+      {8160 / dzielnik, 90},
+      {8400 / dzielnik, 100}};
+
+  if (voltage_mV <= lookup_soc[0][0])
+  {
+    return 0;
+  }
+  if (voltage_mV >= lookup_soc[-1][0])
+  {
+    return 100;
+  }
+
+  for (int i = 0; i < sizeof(lookup_soc); i++)
+  {
+    if (voltage_mV > lookup_soc[i][0] && voltage_mV <= lookup_soc[i + 1][0])
+    {
+      int x0 = lookup_soc[i][0];
+      int x1 = lookup_soc[i + 1][0];
+
+      int y0 = lookup_soc[i][1];
+      int y1 = lookup_soc[i + 1][1];
+
+      return y0 + ((y1 - y0) / (x1 - x0)) * (voltage_mV - x0);
+    }
+  }
+  return -1;
 }
 
 void keyboard_engine_speed_control_debug()
@@ -226,14 +259,14 @@ void read_battery_level_uart_debug(adc_oneshot_unit_handle_t adc1_handle, adc_ca
 {
   int voltage_mV = read_battery_voltage_mV(adc1_handle, adc1_cali_handle);
   printf("[BATTERY_LEVEL]: voltage[mV] = %d ", voltage_mV);
-  printf("soc[\%]: = %d\n", get_battery_proc_from_voltage(voltage_mV)); // TODO czy \% poprawne?
+  printf("soc[prc]: = %d\n", get_soc_from_voltage(voltage_mV)); // TODO czy \% poprawne?
 }
 
 extern void app_main(void)
 {
   // --- INIT ---
-  adc_oneshot_unit_handle_t adc1_handle = init_battery_sensor();
-  adc_cali_handle_t adc1_cali_handle = calibrate_battery_sensor();
+  // adc_oneshot_unit_handle_t adc1_handle = init_battery_sensor();
+  // adc_cali_handle_t adc1_cali_handle = calibrate_battery_sensor();
 
   init_motor_control();
 
