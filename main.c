@@ -147,7 +147,7 @@ adc_oneshot_unit_handle_t init_battery_sensor()
   return adc1_handle;
 }
 
-int read_battery_level(adc_oneshot_unit_handle_t adc1_handle, adc_cali_handle_t adc1_cali_handle)
+int read_battery_voltage_mV(adc_oneshot_unit_handle_t adc1_handle, adc_cali_handle_t adc1_cali_handle)
 {
   int raw_adc;
   int voltage_mV;
@@ -156,21 +156,20 @@ int read_battery_level(adc_oneshot_unit_handle_t adc1_handle, adc_cali_handle_t 
   return voltage_mV;
 }
 
-extern void app_main(void)
+int get_battery_proc_from_voltage(int voltage_mV)
 {
-  adc_oneshot_unit_handle_t adc1_handle = init_battery_sensor();
-  adc_cali_handle_t adc1_cali_handle = calibrate_battery_sensor();
+  // TODO zrobic tu lookup table
+  // liniowo 8.4V (8400mV) max -> dzielnik 3 (2800mV)
+  // 6V (6000mV) min -> dzielnik 3 (2000mV)
+  return voltage_mV < 2000 ? 0 : (voltage_mV - 2000) / 800;
+}
 
-  init_motor_control();
-  fcntl(fileno(stdin), F_SETFL, O_NONBLOCK);
+void keyboard_engine_speed_control_debug()
+{
 
-  uint32_t duty_AB = 1;
-  sleep_motors();
-
-  // sleep_motors();
   while (true)
   {
-    printf("[BATTERY_LEVEL]: voltage[mV] = %d\n", read_battery_level(adc1_handle, adc1_cali_handle));
+    uint32_t duty_AB = 1;
 
     int32_t c = getchar();
     switch (c)
@@ -210,12 +209,40 @@ extern void app_main(void)
       wake_up_motors();
       break;
 
+    case (int)'e':
+      return;
+
     default:
       break;
     }
 
     set_motors_duty(duty_AB, duty_AB);
     // printf("[DEBUG]: duty value = %ld\n", duty_AB);
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
+}
+
+void read_battery_level_uart_debug(adc_oneshot_unit_handle_t adc1_handle, adc_cali_handle_t adc1_cali_handle)
+{
+  int voltage_mV = read_battery_voltage_mV(adc1_handle, adc1_cali_handle);
+  printf("[BATTERY_LEVEL]: voltage[mV] = %d ", voltage_mV);
+  printf("soc[\%]: = %d\n", get_battery_proc_from_voltage(voltage_mV)); // TODO czy \% poprawne?
+}
+
+extern void app_main(void)
+{
+  // --- INIT ---
+  adc_oneshot_unit_handle_t adc1_handle = init_battery_sensor();
+  adc_cali_handle_t adc1_cali_handle = calibrate_battery_sensor();
+
+  init_motor_control();
+
+  fcntl(fileno(stdin), F_SETFL, O_NONBLOCK); // wylacza czekanie na znak przy getchar
+  // TODO czy fcntl ustawia flage globalnie?
+  // --- END INIT ---
+
+  while (1)
+  {
     vTaskDelay(pdMS_TO_TICKS(100));
   }
 }
