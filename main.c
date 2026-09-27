@@ -37,6 +37,24 @@
 #define PWM_MA_CHANNEL LEDC_CHANNEL_0
 #define PWM_MB_CHANNEL LEDC_CHANNEL_1
 
+// magic numbers
+#define DZIELNIK_NAPIECIA_Z_BMS 3
+#define FREQUENCY_FOR_PWM_TIMER 20000
+#define MOTOR_PWM_FULL 1023 // 2^^pwm_clock_resolution - 1
+
+#define STBY_DEACTIVATE_ENGINE 0
+#define STBY_ACTIVATE_ENGINE 1
+
+#define AIN1_MOTOR_FORWARD 0
+#define AIN2_MOTOR_FORWARD 1
+#define AIN1_MOTOR_BACKWARD 1
+#define AIN2_MOTOR_BACKWARD 0
+
+#define BIN1_MOTOR_FORWARD 0
+#define BIN2_MOTOR_FORWARD 1
+#define BIN1_MOTOR_BACKWARD 1
+#define BIN2_MOTOR_BACKWARD 0
+
 void sleep_motors()
 {
   gpio_set_level(STBY_MC_PIN, 0);
@@ -51,9 +69,9 @@ void init_dual_pwm(void)
 {
   ledc_timer_config_t timer_conf = {
       .speed_mode = LEDC_MODE,
-      .duty_resolution = LEDC_TIMER_10_BIT,
+      .duty_resolution = LEDC_TIMER_10_BIT, // last value 2**10 - 1
       .timer_num = LEDC_TIMER,
-      .freq_hz = 20000,
+      .freq_hz = FREQUENCY_FOR_PWM_TIMER,
       .clk_cfg = LEDC_AUTO_CLK,
       .deconfigure = 0};
   ESP_ERROR_CHECK(ledc_timer_config(&timer_conf));
@@ -95,27 +113,94 @@ void init_motor_control(void)
       .intr_type = GPIO_INTR_DISABLE};      // bez przerwan
   ESP_ERROR_CHECK(gpio_config(&mc_output_pins_conf));
 
-  gpio_set_level(STBY_MC_PIN, 0);
+  gpio_set_level(STBY_MC_PIN, STBY_DEACTIVATE_ENGINE);
 
   init_dual_pwm();
 
-  gpio_set_level(AIN1_MC_PIN, 0);
-  gpio_set_level(AIN2_MC_PIN, 1);
+  gpio_set_level(AIN1_MC_PIN, AIN1_MOTOR_FORWARD);
+  gpio_set_level(AIN2_MC_PIN, AIN2_MOTOR_FORWARD);
 
-  gpio_set_level(BIN1_MC_PIN, 1);
-  gpio_set_level(BIN2_MC_PIN, 0);
+  gpio_set_level(BIN1_MC_PIN, BIN1_MOTOR_FORWARD);
+  gpio_set_level(BIN2_MC_PIN, BIN2_MOTOR_FORWARD);
 
-  gpio_set_level(STBY_MC_PIN, 1);
+  gpio_set_level(STBY_MC_PIN, STBY_ACTIVATE_ENGINE);
 }
 
-void set_motors_duty(uint32_t duty_A, uint32_t duty_B)
+// TODO czy tak definiowac flagi globalne
+int is_A_forward = true;
+int is_B_forward = true;
+
+void set_motors_duty(int duty_A, int duty_B)
 {
+  // TODO przemyslec jak przelozyc wyjscie PID na duty_A i duty_B
+  if (duty_A < 0)
+  {
+    duty_A = -duty_A;
+    if (is_A_forward)
+    {
+      set_motor_A_backward();
+    }
+  }
+  else if (!is_A_forward)
+  {
+    set_motor_A_forward();
+  }
+
+  if (duty_B < 0)
+  {
+    duty_B = -duty_B;
+    if (is_B_forward)
+    {
+      set_motor_B_backward();
+    }
+  }
+  else
+  {
+    if (!is_B_forward)
+    {
+      set_motor_B_forward();
+    }
+  }
+
+  if (duty_B > MOTOR_PWM_FULL)
+  {
+    duty_B = MOTOR_PWM_FULL;
+  }
+
   // make sure that duty_A and duty_B are between 0 and (2^^pwm_clock_resolution - 1)
   ledc_set_duty(LEDC_MODE, PWM_MA_CHANNEL, duty_A);
   ledc_update_duty(LEDC_MODE, PWM_MA_CHANNEL);
 
   ledc_set_duty(LEDC_MODE, PWM_MB_CHANNEL, duty_B);
   ledc_update_duty(LEDC_MODE, PWM_MB_CHANNEL);
+}
+
+void set_motor_A_forward()
+{
+  gpio_set_level(AIN1_MC_PIN, AIN1_MOTOR_FORWARD);
+  gpio_set_level(AIN2_MC_PIN, AIN2_MOTOR_FORWARD);
+  is_A_forward = true;
+}
+
+void set_motor_B_forward()
+{
+  gpio_set_level(BIN1_MC_PIN, BIN1_MOTOR_FORWARD);
+  gpio_set_level(BIN2_MC_PIN, BIN2_MOTOR_FORWARD);
+  is_B_forward = true;
+}
+
+void set_motor_A_backward()
+{
+  gpio_set_level(AIN1_MC_PIN, AIN1_MOTOR_BACKWARD);
+  gpio_set_level(AIN2_MC_PIN, AIN2_MOTOR_BACKWARD);
+  is_A_forward = false;
+}
+
+void set_motor_B_backward()
+{
+  gpio_set_level(BIN1_MC_PIN, BIN1_MOTOR_BACKWARD);
+  gpio_set_level(BIN2_MC_PIN, BIN2_MOTOR_BACKWARD);
+  is_B_forward = false;
 }
 
 // -- start adc1 (battery sensor) configuration and calibration --
@@ -209,19 +294,19 @@ void update_line_sensor_table(int *line_sensor_table, adc_oneshot_unit_handle_t 
 
 int get_soc_from_voltage(int voltage_mV)
 {
-  const int dzielnik = 3;
+  // TODO lookup do pamieci programu?
   int lookup_soc[][2] = {
-      {6000 / dzielnik, 0},
-      {6900 / dzielnik, 10},
-      {7200 / dzielnik, 20},
-      {7360 / dzielnik, 30},
-      {7460 / dzielnik, 40},
-      {7560 / dzielnik, 50},
-      {7680 / dzielnik, 60},
-      {7800 / dzielnik, 70},
-      {7960 / dzielnik, 80},
-      {8160 / dzielnik, 90},
-      {8400 / dzielnik, 100}};
+      {6000 / DZIELNIK_NAPIECIA_Z_BMS, 0},
+      {6900 / DZIELNIK_NAPIECIA_Z_BMS, 10},
+      {7200 / DZIELNIK_NAPIECIA_Z_BMS, 20},
+      {7360 / DZIELNIK_NAPIECIA_Z_BMS, 30},
+      {7460 / DZIELNIK_NAPIECIA_Z_BMS, 40},
+      {7560 / DZIELNIK_NAPIECIA_Z_BMS, 50},
+      {7680 / DZIELNIK_NAPIECIA_Z_BMS, 60},
+      {7800 / DZIELNIK_NAPIECIA_Z_BMS, 70},
+      {7960 / DZIELNIK_NAPIECIA_Z_BMS, 80},
+      {8160 / DZIELNIK_NAPIECIA_Z_BMS, 90},
+      {8400 / DZIELNIK_NAPIECIA_Z_BMS, 100}};
 
   if (voltage_mV <= lookup_soc[0][0])
   {
@@ -332,6 +417,7 @@ extern void app_main(void)
 
   while (1)
   {
+    read_battery_level_uart_debug(adc1_handle, adc1_cali_handle);
     vTaskDelay(pdMS_TO_TICKS(100));
   }
 }
