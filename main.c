@@ -118,20 +118,8 @@ void set_motors_duty(uint32_t duty_A, uint32_t duty_B)
   ledc_update_duty(LEDC_MODE, PWM_MB_CHANNEL);
 }
 
-adc_cali_handle_t calibrate_battery_sensor()
-{
-  adc_cali_handle_t adc1_cali_handle = NULL;
-
-  adc_cali_line_fitting_config_t cali_cfg = {
-      .unit_id = ADC_UNIT_1,
-      .atten = ADC_ATTEN_DB_12,
-      .bitwidth = ADC_BITWIDTH_DEFAULT,
-  };
-  ESP_ERROR_CHECK(adc_cali_create_scheme_line_fitting(&cali_cfg, &adc1_cali_handle));
-  return adc1_cali_handle;
-}
-
-adc_oneshot_unit_handle_t init_battery_sensor()
+// -- start adc1 (battery sensor) configuration and calibration --
+adc_oneshot_unit_handle_t get_adc1_soc_handle()
 {
   adc_oneshot_unit_handle_t adc1_handle;
   adc_oneshot_unit_init_cfg_t init_cfg1 = {
@@ -147,7 +135,20 @@ adc_oneshot_unit_handle_t init_battery_sensor()
   return adc1_handle;
 }
 
-int read_battery_voltage_mV(adc_oneshot_unit_handle_t adc1_handle, adc_cali_handle_t adc1_cali_handle)
+adc_cali_handle_t get_cali_handle_adc1_battery()
+{
+  adc_cali_handle_t adc1_cali_handle = NULL;
+
+  adc_cali_line_fitting_config_t cali_cfg = {
+      .unit_id = ADC_UNIT_1,
+      .atten = ADC_ATTEN_DB_12,
+      .bitwidth = ADC_BITWIDTH_DEFAULT,
+  };
+  ESP_ERROR_CHECK(adc_cali_create_scheme_line_fitting(&cali_cfg, &adc1_cali_handle));
+  return adc1_cali_handle;
+}
+
+int get_battery_voltage_mV(adc_oneshot_unit_handle_t adc1_handle, adc_cali_handle_t adc1_cali_handle)
 {
   int raw_adc;
   int voltage_mV;
@@ -155,6 +156,56 @@ int read_battery_voltage_mV(adc_oneshot_unit_handle_t adc1_handle, adc_cali_hand
   adc_cali_raw_to_voltage(adc1_cali_handle, raw_adc, &voltage_mV);
   return voltage_mV;
 }
+// -- end adc1 (battery sensor) configuration and calibration --
+
+// -- start adc2 (line sensor) configuration and calibration --
+adc_oneshot_unit_handle_t get_adc2_line_sensor_handle()
+{
+  adc_oneshot_unit_handle_t adc2_handle;
+  adc_oneshot_unit_init_cfg_t init_cfg2 = {
+      .unit_id = ADC_UNIT_2,
+  };
+  ESP_ERROR_CHECK(adc_oneshot_new_unit(&init_cfg2, &adc2_handle));
+
+  adc_oneshot_chan_cfg_t config = {
+      .bitwidth = ADC_BITWIDTH_DEFAULT,
+      .atten = ADC_ATTEN_DB_12, // 0 - 3.3V
+  };
+  for (adc_channel_t i = 0; i < 8; i++)
+  {
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc2_handle, i, &config));
+  }
+
+  return adc2_handle;
+}
+
+adc_cali_handle_t get_cali_handle_adc2_line_sensor()
+{
+  adc_cali_handle_t adc2_cali_handle = NULL;
+
+  adc_cali_line_fitting_config_t cali_cfg = {
+      .unit_id = ADC_UNIT_2,
+      .atten = ADC_ATTEN_DB_12,
+      .bitwidth = ADC_BITWIDTH_DEFAULT,
+  };
+  ESP_ERROR_CHECK(adc_cali_create_scheme_line_fitting(&cali_cfg, &adc2_cali_handle));
+  return adc2_cali_handle;
+}
+
+void update_line_sensor_table(int *line_sensor_table, adc_oneshot_unit_handle_t adc2_handle, adc_cali_handle_t adc2_cali_handle) // TODO how to properly take this argument
+{
+  int raw_adc_curr;
+  int voltage_mV_curr;
+  for (int i = 0; i < sizeof(line_sensor_table); i++)
+  {
+    adc_oneshot_read(adc2_handle, ADC_CHANNEL_6, &raw_adc_curr);
+    adc_cali_raw_to_voltage(adc2_cali_handle, raw_adc_curr, &voltage_mV_curr);
+    line_sensor_table[i] = voltage_mV_curr;
+    // TODO dorobic do wszystkich funckji zwracajacych esp_ok akcje w przypadku kiedy nie wystapi esp_ok, co przekazac dalej? najlawtiej moze byc nie zwracac niczego z funkcji tylko pracowac na kopiach tak zeby nie trzeba bylo zwracac jakiejsc arbitralnej funkcji tylko zwrocic sukces porazka i w funkcji wywolujacej rozwiazywac sytuacje pojawienia sie bledu. Ewnetualnie jakies lepsze operaowanie na typach bledow. Generalnie trzeba bedzie uzbroic kod w przyszlosci.
+  }
+}
+
+// -- end adc2 (line sensor) configuration and calibration --
 
 int get_soc_from_voltage(int voltage_mV)
 {
@@ -257,7 +308,7 @@ void keyboard_engine_speed_control_debug()
 
 void read_battery_level_uart_debug(adc_oneshot_unit_handle_t adc1_handle, adc_cali_handle_t adc1_cali_handle)
 {
-  int voltage_mV = read_battery_voltage_mV(adc1_handle, adc1_cali_handle);
+  int voltage_mV = get_battery_voltage_mV(adc1_handle, adc1_cali_handle);
   printf("[BATTERY_LEVEL]: voltage[mV] = %d ", voltage_mV);
   printf("soc[prc]: = %d\n", get_soc_from_voltage(voltage_mV)); // TODO czy \% poprawne?
 }
@@ -265,14 +316,19 @@ void read_battery_level_uart_debug(adc_oneshot_unit_handle_t adc1_handle, adc_ca
 extern void app_main(void)
 {
   // --- INIT ---
-  // adc_oneshot_unit_handle_t adc1_handle = init_battery_sensor();
-  // adc_cali_handle_t adc1_cali_handle = calibrate_battery_sensor();
+  adc_oneshot_unit_handle_t adc1_handle = get_adc1_soc_handle();
+  adc_cali_handle_t adc1_cali_handle = get_cali_handle_adc1_battery();
+
+  adc_oneshot_unit_handle_t adc2_handle = get_adc2_line_sensor_handle();
+  adc_cali_handle_t adc2_cali_handle = get_cali_handle_adc2_battery();
 
   init_motor_control();
 
   fcntl(fileno(stdin), F_SETFL, O_NONBLOCK); // wylacza czekanie na znak przy getchar
   // TODO czy fcntl ustawia flage globalnie?
   // --- END INIT ---
+
+  // TODO dodac tablice z wartosciami napiec na sensorze linii i pobrac do niej wartosci
 
   while (1)
   {
