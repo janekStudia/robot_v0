@@ -55,12 +55,12 @@
 #define BIN1_MOTOR_BACKWARD 1
 #define BIN2_MOTOR_BACKWARD 0
 
-void sleep_motors()
+void sleep_motors(void)
 {
   gpio_set_level(STBY_MC_PIN, 0);
 }
 
-void wake_up_motors()
+void wake_up_motors(void)
 {
   gpio_set_level(STBY_MC_PIN, 1);
 }
@@ -130,6 +130,40 @@ void init_motor_control(void)
 int is_A_forward = true;
 int is_B_forward = true;
 
+void set_motor_A_forward(void)
+{
+  gpio_set_level(AIN1_MC_PIN, AIN1_MOTOR_FORWARD);
+  gpio_set_level(AIN2_MC_PIN, AIN2_MOTOR_FORWARD);
+  is_A_forward = true;
+}
+
+void set_motor_B_forward(void)
+{
+  gpio_set_level(BIN1_MC_PIN, BIN1_MOTOR_FORWARD);
+  gpio_set_level(BIN2_MC_PIN, BIN2_MOTOR_FORWARD);
+  is_B_forward = true;
+}
+
+void set_motor_A_backward(void)
+{
+  gpio_set_level(STBY_MC_PIN, STBY_DEACTIVATE_ENGINE);
+  gpio_set_level(AIN1_MC_PIN, AIN1_MOTOR_BACKWARD);
+  gpio_set_level(AIN2_MC_PIN, AIN2_MOTOR_BACKWARD);
+  gpio_set_level(STBY_MC_PIN, STBY_ACTIVATE_ENGINE);
+
+  is_A_forward = false;
+}
+
+void set_motor_B_backward(void)
+{
+  gpio_set_level(STBY_MC_PIN, STBY_DEACTIVATE_ENGINE);
+  gpio_set_level(BIN1_MC_PIN, BIN1_MOTOR_BACKWARD);
+  gpio_set_level(BIN2_MC_PIN, BIN2_MOTOR_BACKWARD);
+  gpio_set_level(STBY_MC_PIN, STBY_ACTIVATE_ENGINE);
+
+  is_B_forward = false;
+}
+
 void set_motors_duty(int duty_A, int duty_B)
 {
   // TODO przemyslec jak przelozyc wyjscie PID na duty_A i duty_B
@@ -175,36 +209,8 @@ void set_motors_duty(int duty_A, int duty_B)
   ledc_update_duty(LEDC_MODE, PWM_MB_CHANNEL);
 }
 
-void set_motor_A_forward()
-{
-  gpio_set_level(AIN1_MC_PIN, AIN1_MOTOR_FORWARD);
-  gpio_set_level(AIN2_MC_PIN, AIN2_MOTOR_FORWARD);
-  is_A_forward = true;
-}
-
-void set_motor_B_forward()
-{
-  gpio_set_level(BIN1_MC_PIN, BIN1_MOTOR_FORWARD);
-  gpio_set_level(BIN2_MC_PIN, BIN2_MOTOR_FORWARD);
-  is_B_forward = true;
-}
-
-void set_motor_A_backward()
-{
-  gpio_set_level(AIN1_MC_PIN, AIN1_MOTOR_BACKWARD);
-  gpio_set_level(AIN2_MC_PIN, AIN2_MOTOR_BACKWARD);
-  is_A_forward = false;
-}
-
-void set_motor_B_backward()
-{
-  gpio_set_level(BIN1_MC_PIN, BIN1_MOTOR_BACKWARD);
-  gpio_set_level(BIN2_MC_PIN, BIN2_MOTOR_BACKWARD);
-  is_B_forward = false;
-}
-
 // -- start adc1 (battery sensor) configuration and calibration --
-adc_oneshot_unit_handle_t get_adc1_soc_handle()
+adc_oneshot_unit_handle_t get_adc1_soc_handle(void)
 {
   adc_oneshot_unit_handle_t adc1_handle;
   adc_oneshot_unit_init_cfg_t init_cfg1 = {
@@ -220,7 +226,7 @@ adc_oneshot_unit_handle_t get_adc1_soc_handle()
   return adc1_handle;
 }
 
-adc_cali_handle_t get_cali_handle_adc1_battery()
+adc_cali_handle_t get_cali_handle_adc1_battery(void)
 {
   adc_cali_handle_t adc1_cali_handle = NULL;
 
@@ -244,7 +250,7 @@ int get_battery_voltage_mV(adc_oneshot_unit_handle_t adc1_handle, adc_cali_handl
 // -- end adc1 (battery sensor) configuration and calibration --
 
 // -- start adc2 (line sensor) configuration and calibration --
-adc_oneshot_unit_handle_t get_adc2_line_sensor_handle()
+adc_oneshot_unit_handle_t get_adc2_line_sensor_handle(void)
 {
   adc_oneshot_unit_handle_t adc2_handle;
   adc_oneshot_unit_init_cfg_t init_cfg2 = {
@@ -264,7 +270,7 @@ adc_oneshot_unit_handle_t get_adc2_line_sensor_handle()
   return adc2_handle;
 }
 
-adc_cali_handle_t get_cali_handle_adc2_line_sensor()
+adc_cali_handle_t get_cali_handle_adc2_line_sensor(void)
 {
   adc_cali_handle_t adc2_cali_handle = NULL;
 
@@ -333,62 +339,162 @@ int get_soc_from_voltage(int voltage_mV)
   return -1;
 }
 
-void keyboard_engine_speed_control_debug()
+void keyboard_engine_speed_control_debug(void)
 {
+  static int duty_AB = 0;
 
-  while (true)
+  int c = getchar();
+  switch (c)
   {
-    uint32_t duty_AB = 1;
+  case (int)'0':
+    duty_AB = 0;
+    break;
+  case (int)'1':
+    duty_AB = 100;
+    break;
+  case (int)'2':
+    duty_AB = 200;
+    break;
+  case (int)'3':
+    duty_AB = 300;
+    break;
+  case (int)'4':
+    duty_AB = 400;
+    break;
+  case (int)'5':
+    duty_AB = 500;
+    break;
+  case (int)'6':
+    duty_AB = 600;
+    break;
+  case (int)'7':
+    duty_AB = 700;
+    break;
+  case (int)'8':
+    duty_AB = 800;
+    break;
+  case (int)'9':
+    duty_AB = 1023;
+    break;
 
-    int32_t c = getchar();
-    switch (c)
-    {
-    case (int)'1':
-      duty_AB = 100;
-      break;
-    case (int)'2':
-      duty_AB = 200;
-      break;
-    case (int)'3':
-      duty_AB = 300;
-      break;
-    case (int)'4':
-      duty_AB = 400;
-      break;
-    case (int)'5':
-      duty_AB = 500;
-      break;
-    case (int)'6':
-      duty_AB = 600;
-      break;
-    case (int)'7':
-      duty_AB = 700;
-      break;
-    case (int)'8':
-      duty_AB = 800;
-      break;
-    case (int)'9':
-      duty_AB = 1023;
-      break;
+  case (int)'b':
+    set_motor_A_backward();
+    set_motor_B_backward();
+    break;
 
-    case (int)'s':
-      sleep_motors();
-      break;
-    case (int)'w':
-      wake_up_motors();
-      break;
+  case (int)'f':
+    set_motor_A_forward();
+    set_motor_B_forward();
+    break;
 
-    case (int)'e':
-      return;
+  case (int)'s':
+    sleep_motors();
+    break;
+  case (int)'w':
+    wake_up_motors();
+    break;
 
-    default:
-      break;
-    }
+  case (int)'e':
+    return;
 
-    set_motors_duty(duty_AB, duty_AB);
-    // printf("[DEBUG]: duty value = %ld\n", duty_AB);
-    vTaskDelay(pdMS_TO_TICKS(100));
+  default:
+    break;
   }
+
+  set_motors_duty(duty_AB, duty_AB);
+  // printf("[DEBUG]: duty value = %ld\n", duty_AB);
+}
+
+void keyboard2_engine_speed_control_debug(void)
+{
+  static int duty_AB = 0;
+  static int direction = 0;
+
+  int c = getchar();
+  switch (c)
+  {
+  case (int)'0':
+    duty_AB = 0;
+    break;
+
+  case (int)'8':
+    duty_AB += 100;
+    break;
+  case (int)'2':
+    duty_AB -= 100;
+    break;
+
+  case (int)'4':
+    direction -= 1;
+    break;
+  case (int)'6':
+    direction += 1;
+    break;
+
+  case (int)'s':
+    sleep_motors();
+    break;
+  case (int)'w':
+    wake_up_motors();
+    break;
+  case (int)'e':
+    return;
+
+  default:
+    break;
+  }
+
+  if (direction > 3)
+  {
+    direction = 3;
+  }
+  else if (direction < -3)
+  {
+    direction = -3;
+  }
+
+  if (duty_AB > MOTOR_PWM_FULL)
+  {
+    duty_AB = MOTOR_PWM_FULL;
+  }
+  else if (duty_AB < -MOTOR_PWM_FULL)
+  {
+    duty_AB = -MOTOR_PWM_FULL;
+  }
+
+  switch (direction)
+  {
+  case -3:
+    set_motors_duty(duty_AB, -duty_AB);
+    break;
+
+  case -2:
+    set_motors_duty(duty_AB, 0);
+    break;
+
+  case -1:
+    set_motors_duty(duty_AB, duty_AB / 2);
+    break;
+
+  case 0:
+    set_motors_duty(duty_AB, duty_AB);
+    break;
+
+  case 1:
+    set_motors_duty(duty_AB / 2, duty_AB);
+    break;
+  case 2:
+    set_motors_duty(0, duty_AB);
+    break;
+
+  case 3:
+    set_motors_duty(-duty_AB, duty_AB);
+    break;
+
+  default:
+    break;
+  }
+  printf("[DEBUG]: duty value = %d, direction = %d\n", duty_AB, direction);
 }
 
 void read_battery_level_uart_debug(adc_oneshot_unit_handle_t adc1_handle, adc_cali_handle_t adc1_cali_handle)
@@ -398,14 +504,40 @@ void read_battery_level_uart_debug(adc_oneshot_unit_handle_t adc1_handle, adc_ca
   printf("soc[prc]: = %d\n", get_soc_from_voltage(voltage_mV)); // TODO czy \% poprawne?
 }
 
+void turn_90_right(int czas_obrtu_ms)
+{
+  set_motors_duty(-300, 300);
+  vTaskDelay(pdMS_TO_TICKS(czas_obrtu_ms));
+  set_motors_duty(0, 0);
+}
+void turn_90_left(int czas_obrtu_ms)
+{
+  set_motors_duty(300, -300);
+  vTaskDelay(pdMS_TO_TICKS(czas_obrtu_ms));
+  set_motors_duty(0, 0);
+}
+
+void pattern1(void)
+{
+  for (int i = 0; i < 4; i++)
+  {
+    set_motors_duty(400, 390);
+    vTaskDelay(pdMS_TO_TICKS(1800));
+    set_motors_duty(0, 0);
+    vTaskDelay(pdMS_TO_TICKS(100));
+    turn_90_right(450);
+    vTaskDelay(pdMS_TO_TICKS(100));
+  }
+}
+
 extern void app_main(void)
 {
   // --- INIT ---
-  adc_oneshot_unit_handle_t adc1_handle = get_adc1_soc_handle();
-  adc_cali_handle_t adc1_cali_handle = get_cali_handle_adc1_battery();
+  // adc_oneshot_unit_handle_t adc1_handle = get_adc1_soc_handle();
+  // adc_cali_handle_t adc1_cali_handle = get_cali_handle_adc1_battery();
 
-  adc_oneshot_unit_handle_t adc2_handle = get_adc2_line_sensor_handle();
-  adc_cali_handle_t adc2_cali_handle = get_cali_handle_adc2_battery();
+  // adc_oneshot_unit_handle_t adc2_handle = get_adc2_line_sensor_handle();
+  // adc_cali_handle_t adc2_cali_handle = get_cali_handle_adc2_line_sensor();
 
   init_motor_control();
 
@@ -415,9 +547,9 @@ extern void app_main(void)
 
   // TODO dodac tablice z wartosciami napiec na sensorze linii i pobrac do niej wartosci
 
-  while (1)
+  // read_battery_level_uart_debug(adc1_handle, adc1_cali_handle);
+  while (true)
   {
-    read_battery_level_uart_debug(adc1_handle, adc1_cali_handle);
-    vTaskDelay(pdMS_TO_TICKS(100));
+    pattern1();
   }
 }
