@@ -4,15 +4,21 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
+#include "esp_timer.h"
+#include "esp_attr.h"
+
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 #include "driver/uart.h"
+#include "driver/pulse_cnt.h"
 
 #include "esp_err.h"
 
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
+
+#include <stdatomic.h>
 
 // pins configuration
 #define PWM_MA_GPIO GPIO_NUM_23
@@ -21,7 +27,10 @@
 #define STBY_MC_PIN GPIO_NUM_19
 #define BIN1_MC_PIN GPIO_NUM_18
 #define BIN2_MC_PIN GPIO_NUM_5
-#define PWM_MB_GPIO GPIO_NUM_4
+#define PWM_MB_GPIO GPIO_NUM_17
+
+#define ENCODER_A_PIN GPIO_NUM_16
+#define ENCODER_B_PIN GPIO_NUM_4
 
 // motor control mask
 #define MC_OUTPUT_PINS_MASK ((1ULL << AIN1_MC_PIN) | \
@@ -54,6 +63,66 @@
 #define BIN2_MOTOR_FORWARD 1
 #define BIN1_MOTOR_BACKWARD 1
 #define BIN2_MOTOR_BACKWARD 0
+
+#define TIMER_INTERVAL_US (1000 * 1000) // 100ms in us
+#define TIMER_INTERVALS_PERS 1
+
+static atomic_int g_encoder_B_ticks_per_s = 0;
+pcnt_unit_handle_t g_encoderA_pcnt_handle = NULL;
+pcnt_unit_handle_t g_encoderB_pcnt_handle = NULL;
+
+static void IRAM_ATTR
+timer_callback(void *arg)
+{
+  static int count;
+  static int prev_count = 0;
+  pcnt_unit_get_count(g_encoderB_pcnt_handle, &count);
+
+  atomic_store(&g_encoder_B_ticks_per_s, (count - prev_count) * TIMER_INTERVALS_PERS);
+  prev_count = count;
+
+  printf("[DEBUG]: predkosc chwilowa = %d\n", g_encoder_B_ticks_per_s);
+}
+
+void init_timer()
+{
+  const esp_timer_create_args_t timer_args = {
+      .callback = &timer_callback,
+      .name = "speed_timer"};
+  esp_timer_handle_t speed_timer;
+  ESP_ERROR_CHECK(esp_timer_create(&timer_args, &speed_timer));
+  ESP_ERROR_CHECK(esp_timer_start_periodic(speed_timer, TIMER_INTERVAL_US));
+}
+
+void init_single_pcnt_unit(int gpio_pin, pcnt_unit_handle_t *unit_handle)
+{
+  pcnt_unit_config_t unit_config = {
+      .low_limit = -32768, // TODO delete magic numbers
+      .high_limit = 32767,
+      .flags = {.accum_count = 1},
+  };
+  ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, unit_handle));
+
+  pcnt_glitch_filter_config_t filter_config = {
+      .max_glitch_ns = 100,
+  };
+  ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(*unit_handle, &filter_config));
+
+  pcnt_chan_config_t chan_config = {
+      .edge_gpio_num = gpio_pin,
+      .level_gpio_num = -1, // -1 means unused
+  };
+  pcnt_channel_handle_t chan_handle = NULL;
+  ESP_ERROR_CHECK(pcnt_new_channel(*unit_handle, &chan_config, &chan_handle));
+
+  ESP_ERROR_CHECK(pcnt_channel_set_edge_action(chan_handle, PCNT_CHANNEL_EDGE_ACTION_INCREASE, PCNT_CHANNEL_EDGE_ACTION_INCREASE));
+
+  ESP_ERROR_CHECK(pcnt_channel_set_level_action(chan_handle, PCNT_CHANNEL_LEVEL_ACTION_KEEP, PCNT_CHANNEL_LEVEL_ACTION_KEEP));
+
+  ESP_ERROR_CHECK(pcnt_unit_enable(*unit_handle));
+  ESP_ERROR_CHECK(pcnt_unit_clear_count(*unit_handle));
+  ESP_ERROR_CHECK(pcnt_unit_start(*unit_handle));
+}
 
 void sleep_motors(void)
 {
@@ -530,6 +599,16 @@ void pattern1(void)
   }
 }
 
+int get_B_rotations(pcnt_unit_handle_t encoderB_pcnt_handle)
+{
+  int count;
+  if (!pcnt_unit_get_count(encoderB_pcnt_handle, &count)) // ESP_OK = 0 , jest zwracane przy sukcesie
+  {
+    return count;
+  }
+  return -1;
+}
+
 extern void app_main(void)
 {
   // --- INIT ---
@@ -539,7 +618,12 @@ extern void app_main(void)
   // adc_oneshot_unit_handle_t adc2_handle = get_adc2_line_sensor_handle();
   // adc_cali_handle_t adc2_cali_handle = get_cali_handle_adc2_line_sensor();
 
+  init_single_pcnt_unit(ENCODER_A_PIN, &g_encoderA_pcnt_handle);
+  init_single_pcnt_unit(ENCODER_B_PIN, &g_encoderB_pcnt_handle);
+
   init_motor_control();
+
+  init_timer();
 
   fcntl(fileno(stdin), F_SETFL, O_NONBLOCK); // wylacza czekanie na znak przy getchar
   // TODO czy fcntl ustawia flage globalnie?
@@ -548,8 +632,19 @@ extern void app_main(void)
   // TODO dodac tablice z wartosciami napiec na sensorze linii i pobrac do niej wartosci
 
   // read_battery_level_uart_debug(adc1_handle, adc1_cali_handle);
+  int i = 1;
   while (true)
   {
-    pattern1();
+    if (i > 4)
+    {
+      i = 1;
+    }
+
+    set_motors_duty(500, 500);
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    // printf("[DEBUG]: obroty B = %d\n", get_B_rotations(g_encoderB_pcnt_handle));
+    // printf("[DEBUG]: predkosc chwilowa = %d\n", g_encoder_B_ticks_per_s);
+
+    i++;
   }
 }
