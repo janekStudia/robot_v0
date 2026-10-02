@@ -19,7 +19,13 @@
 
 #define VOLTAGE_DIVIDER_BMS 3
 
-adc_oneshot_unit_handle_t get_adc1_handle(void)
+static adc_oneshot_unit_handle_t adc1_handle = NULL;
+static adc_cali_handle_t adc1_cali_handle = NULL;
+
+static adc_oneshot_unit_handle_t adc2_handle = NULL;
+static adc_cali_handle_t adc2_cali_handle = NULL;
+
+static adc_oneshot_unit_handle_t get_adc1_handle(void)
 {
   adc_oneshot_unit_handle_t adc1_handle;
   adc_oneshot_unit_init_cfg_t init_cfg1 = {
@@ -41,7 +47,7 @@ adc_oneshot_unit_handle_t get_adc1_handle(void)
   return adc1_handle;
 }
 
-adc_cali_handle_t get_cali_handle_adc1(void)
+static adc_cali_handle_t get_cali_handle_adc1(void)
 {
   adc_cali_handle_t adc1_cali_handle = NULL;
 
@@ -54,7 +60,7 @@ adc_cali_handle_t get_cali_handle_adc1(void)
   return adc1_cali_handle;
 }
 
-adc_oneshot_unit_handle_t get_adc2_handle(void)
+static adc_oneshot_unit_handle_t get_adc2_handle(void)
 {
   adc_oneshot_unit_handle_t adc2_handle;
   adc_oneshot_unit_init_cfg_t init_cfg2 = {
@@ -73,7 +79,7 @@ adc_oneshot_unit_handle_t get_adc2_handle(void)
   return adc2_handle;
 }
 
-adc_cali_handle_t get_cali_handle_adc2(void)
+static adc_cali_handle_t get_cali_handle_adc2(void)
 {
   adc_cali_handle_t adc2_cali_handle = NULL;
 
@@ -86,7 +92,16 @@ adc_cali_handle_t get_cali_handle_adc2(void)
   return adc2_cali_handle;
 }
 
-int get_battery_voltage_mV(adc_oneshot_unit_handle_t adc1_handle, adc_cali_handle_t adc1_cali_handle)
+void init_both_adc_units(void)
+{
+  adc1_handle = get_adc1_handle();
+  adc1_cali_handle = get_cali_handle_adc1();
+
+  adc2_handle = get_adc2_handle();
+  adc2_cali_handle = get_cali_handle_adc2();
+}
+
+int get_battery_voltage_mV(void)
 {
   int raw_adc;
   int voltage_mV;
@@ -95,46 +110,10 @@ int get_battery_voltage_mV(adc_oneshot_unit_handle_t adc1_handle, adc_cali_handl
   return voltage_mV;
 }
 
-void update_line_sensor_table(int *line_sensor_table, adc_oneshot_unit_handle_t adc1_handle, adc_cali_handle_t adc1_cali_handle, adc_oneshot_unit_handle_t adc2_handle, adc_cali_handle_t adc2_cali_handle) // TODO how to properly take this argument
-{
-  int raw_adc_curr;
-  int voltage_mV_curr;
-
-  static const adc_channel_t table_of_adc1_channels[] = {REFLECTIVE_SENSOR_D1_CHANNEL,
-                                                         REFLECTIVE_SENSOR_D2_CHANNEL,
-                                                         REFLECTIVE_SENSOR_D3_CHANNEL,
-                                                         REFLECTIVE_SENSOR_D4_CHANNEL,
-                                                         REFLECTIVE_SENSOR_D5_CHANNEL};
-
-  static const adc_channel_t table_of_adc2_channels[] = {REFLECTIVE_SENSOR_D6_CHANNEL,
-                                                         REFLECTIVE_SENSOR_D7_CHANNEL,
-                                                         REFLECTIVE_SENSOR_D8_CHANNEL};
-
-  // adc1
-  for (int i = 0; i < sizeof(table_of_adc1_channels); i++)
-  {
-    adc_oneshot_read(adc1_handle, table_of_adc1_channels[i], &raw_adc_curr);
-    adc_cali_raw_to_voltage(adc1_cali_handle, raw_adc_curr, &voltage_mV_curr);
-    line_sensor_table[i] = voltage_mV_curr;
-  }
-
-  // adc2
-  for (int i = sizeof(table_of_adc1_channels); i < sizeof(table_of_adc2_channels) + sizeof(table_of_adc1_channels); i++)
-  {
-    adc_oneshot_read(adc2_handle, table_of_adc2_channels[i], &raw_adc_curr);
-    adc_cali_raw_to_voltage(adc2_cali_handle, raw_adc_curr, &voltage_mV_curr);
-    line_sensor_table[i] = voltage_mV_curr;
-  }
-  // TODO moze do zmiany powyzsze, troche zagmatwane
-
-  // TODO dorobic do wszystkich funckji zwracajacych esp_ok akcje w przypadku kiedy nie wystapi esp_ok, co przekazac dalej? najlawtiej moze byc nie zwracac niczego z funkcji tylko pracowac na kopiach tak zeby nie trzeba bylo zwracac jakiejsc arbitralnej funkcji tylko zwrocic sukces porazka i w funkcji wywolujacej rozwiazywac sytuacje pojawienia sie bledu. Ewnetualnie jakies lepsze operaowanie na typach bledow. Generalnie trzeba bedzie uzbroic kod w przyszlosci.
-}
-
 int get_soc_from_voltage(int voltage_mV)
 {
-  // @returns estimated State Of Charge of the battery pack, values 0-100
   // TODO lookup do pamieci programu?
-  int lookup_soc[][2] = {
+  const int lookup_soc[][2] = {
       {6000 / VOLTAGE_DIVIDER_BMS, 0},
       {6900 / VOLTAGE_DIVIDER_BMS, 10},
       {7200 / VOLTAGE_DIVIDER_BMS, 20},
@@ -172,5 +151,52 @@ int get_soc_from_voltage(int voltage_mV)
   return -1;
 }
 
+int get_soc(void)
+{
+  return get_soc_from_voltage(get_battery_voltage_mV());
+}
+
+void update_line_sensor_table(int *line_sensor_table) // TODO how to properly take this argument
+{
+  int raw_adc_curr;
+  int voltage_mV_curr;
+
+  // adc1
+  adc_oneshot_read(adc1_handle, REFLECTIVE_SENSOR_D1_CHANNEL, &raw_adc_curr);
+  adc_cali_raw_to_voltage(adc1_cali_handle, raw_adc_curr, &voltage_mV_curr);
+  line_sensor_table[0] = voltage_mV_curr;
+
+  adc_oneshot_read(adc1_handle, REFLECTIVE_SENSOR_D2_CHANNEL, &raw_adc_curr);
+  adc_cali_raw_to_voltage(adc1_cali_handle, raw_adc_curr, &voltage_mV_curr);
+  line_sensor_table[1] = voltage_mV_curr;
+
+  adc_oneshot_read(adc1_handle, REFLECTIVE_SENSOR_D3_CHANNEL, &raw_adc_curr);
+  adc_cali_raw_to_voltage(adc1_cali_handle, raw_adc_curr, &voltage_mV_curr);
+  line_sensor_table[2] = voltage_mV_curr;
+
+  adc_oneshot_read(adc1_handle, REFLECTIVE_SENSOR_D4_CHANNEL, &raw_adc_curr);
+  adc_cali_raw_to_voltage(adc1_cali_handle, raw_adc_curr, &voltage_mV_curr);
+  line_sensor_table[3] = voltage_mV_curr;
+
+  adc_oneshot_read(adc1_handle, REFLECTIVE_SENSOR_D5_CHANNEL, &raw_adc_curr);
+  adc_cali_raw_to_voltage(adc1_cali_handle, raw_adc_curr, &voltage_mV_curr);
+  line_sensor_table[4] = voltage_mV_curr;
+
+  // adc2
+  adc_oneshot_read(adc2_handle, REFLECTIVE_SENSOR_D6_CHANNEL, &raw_adc_curr);
+  adc_cali_raw_to_voltage(adc2_cali_handle, raw_adc_curr, &voltage_mV_curr);
+  line_sensor_table[5] = voltage_mV_curr;
+
+  adc_oneshot_read(adc2_handle, REFLECTIVE_SENSOR_D7_CHANNEL, &raw_adc_curr);
+  adc_cali_raw_to_voltage(adc2_cali_handle, raw_adc_curr, &voltage_mV_curr);
+  line_sensor_table[6] = voltage_mV_curr;
+
+  adc_oneshot_read(adc2_handle, REFLECTIVE_SENSOR_D8_CHANNEL, &raw_adc_curr);
+  adc_cali_raw_to_voltage(adc2_cali_handle, raw_adc_curr, &voltage_mV_curr);
+  line_sensor_table[7] = voltage_mV_curr;
+}
+
+// TODO dorobic do wszystkich funckji zwracajacych esp_ok akcje w przypadku kiedy nie wystapi esp_ok, co przekazac dalej? najlawtiej moze byc nie zwracac niczego z funkcji tylko pracowac na kopiach tak zeby nie trzeba bylo zwracac jakiejsc arbitralnej funkcji tylko zwrocic sukces porazka i w funkcji wywolujacej rozwiazywac sytuacje pojawienia sie bledu. Ewnetualnie jakies lepsze operaowanie na typach bledow. Generalnie trzeba bedzie uzbroic kod w przyszlosci.
 // TODO zmienic wszystkie biblioteki zeby mialy wartosci stale statyczne ktorych wartosc mozna czerpac za pomoca getterow lub w cale nie sa potrzebne poza biblioteka
 // chodzi o to zeby uniknac przekazywania handles albo koniecznosci korzystania z dziwnych typow wewentrz main
+// TODO dodac static do funkcji wewnetrznych i usuac je z definicji .h

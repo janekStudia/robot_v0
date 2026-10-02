@@ -54,7 +54,7 @@ void wake_up_motors(void)
   gpio_set_level(STBY_MC_PIN, STBY_ACTIVATE_ENGINE);
 }
 
-void init_dual_pwm(void)
+static void init_dual_pwm(void)
 {
   ledc_timer_config_t timer_conf = {
       .speed_mode = LEDC_MODE,

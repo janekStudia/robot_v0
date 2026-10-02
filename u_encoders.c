@@ -16,7 +16,7 @@
 static pcnt_unit_handle_t encA_pcnt_handle = NULL;
 static pcnt_unit_handle_t encB_pcnt_handle = NULL;
 
-void init_single_pcnt_unit(int gpio_pin, pcnt_unit_handle_t *unit_handle)
+static void init_single_pcnt_unit(int gpio_pin, pcnt_unit_handle_t *unit_handle)
 {
   pcnt_unit_config_t unit_config = {
       .low_limit = PCNT_LOW_LIMIT,
