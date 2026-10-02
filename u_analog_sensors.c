@@ -112,8 +112,7 @@ int get_battery_voltage_mV(void)
 
 int get_soc_from_voltage(int voltage_mV)
 {
-  // TODO lookup do pamieci programu?
-  const int lookup_soc[][2] = {
+  static const int lookup_soc[][2] = {
       {6000 / VOLTAGE_DIVIDER_BMS, 0},
       {6900 / VOLTAGE_DIVIDER_BMS, 10},
       {7200 / VOLTAGE_DIVIDER_BMS, 20},
@@ -156,7 +155,7 @@ int get_soc(void)
   return get_soc_from_voltage(get_battery_voltage_mV());
 }
 
-void update_line_sensor_table(int *line_sensor_table) // TODO how to properly take this argument
+void update_line_sensor_table(int *line_sensor_table)
 {
   int raw_adc_curr;
   int voltage_mV_curr;
@@ -197,6 +196,3 @@ void update_line_sensor_table(int *line_sensor_table) // TODO how to properly ta
 }
 
 // TODO dorobic do wszystkich funckji zwracajacych esp_ok akcje w przypadku kiedy nie wystapi esp_ok, co przekazac dalej? najlawtiej moze byc nie zwracac niczego z funkcji tylko pracowac na kopiach tak zeby nie trzeba bylo zwracac jakiejsc arbitralnej funkcji tylko zwrocic sukces porazka i w funkcji wywolujacej rozwiazywac sytuacje pojawienia sie bledu. Ewnetualnie jakies lepsze operaowanie na typach bledow. Generalnie trzeba bedzie uzbroic kod w przyszlosci.
-// TODO zmienic wszystkie biblioteki zeby mialy wartosci stale statyczne ktorych wartosc mozna czerpac za pomoca getterow lub w cale nie sa potrzebne poza biblioteka
-// chodzi o to zeby uniknac przekazywania handles albo koniecznosci korzystania z dziwnych typow wewentrz main
-// TODO dodac static do funkcji wewnetrznych i usuac je z definicji .h

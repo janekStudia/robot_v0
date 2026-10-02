@@ -9,7 +9,7 @@
 #define PCNT_LOW_LIMIT -32768 // -2^15
 #define PCNT_HIGH_LIMIT 32767 // 2^15 - 1
 
-#define MAx_GLITCH_NS 100
+#define MAX_GLITCH_NS 1000
 
 #define UNUSED -1
 
@@ -26,7 +26,7 @@ static void init_single_pcnt_unit(int gpio_pin, pcnt_unit_handle_t *unit_handle)
   ESP_ERROR_CHECK(pcnt_new_unit(&unit_config, unit_handle));
 
   pcnt_glitch_filter_config_t filter_config = {
-      .max_glitch_ns = MAx_GLITCH_NS,
+      .max_glitch_ns = MAX_GLITCH_NS,
   };
   ESP_ERROR_CHECK(pcnt_unit_set_glitch_filter(*unit_handle, &filter_config));
 
@@ -54,26 +54,16 @@ void init_encoders_pcnt_units(void)
 
 int get_encA_count(void)
 {
-  int count;
-  static int prev_count = 0;
-  if (!pcnt_unit_get_count(encA_pcnt_handle, &count)) // ESP_OK = 0 , jest zwracane przy sukcesie
-  {
-    prev_count = count;
-    return count;
-  }
-  return prev_count;
+  static int count;
+  pcnt_unit_get_count(encA_pcnt_handle, &count);
+  return count;
 }
 
 int get_encB_count(void)
 {
-  int count;
-  static int prev_count = 0;
-  if (!pcnt_unit_get_count(encB_pcnt_handle, &count)) // ESP_OK = 0 , jest zwracane przy sukcesie
-  {
-    prev_count = count;
-    return count;
-  }
-  return prev_count;
+  static int count;
+  pcnt_unit_get_count(encB_pcnt_handle, &count);
+  return count;
 }
 
 void clear_both_encoders_count(void)
