@@ -25,9 +25,6 @@
 #include "u_encoders.h"
 #include "u_analog_sensors.h"
 
-#define ENCODER_A_PIN GPIO_NUM_16
-#define ENCODER_B_PIN GPIO_NUM_4
-
 // magic numbers
 
 #define TIMER_INTERVAL_US (1000 * 1000) // 100ms in us
@@ -64,7 +61,7 @@ void read_battery_level_uart_debug(adc_oneshot_unit_handle_t adc1_handle, adc_ca
 {
   int voltage_mV = get_battery_voltage_mV(adc1_handle, adc1_cali_handle);
   printf("[BATTERY_LEVEL]: voltage[mV] = %d ", voltage_mV);
-  printf("soc[prc]: = %d\n", get_soc_from_voltage(voltage_mV)); // TODO czy \% poprawne?
+  printf("soc[prc]: = %d\n", get_soc_from_voltage(voltage_mV));
 }
 
 void turn_90_right(int czas_obrtu_ms)
@@ -102,9 +99,6 @@ extern void app_main(void)
   // adc_oneshot_unit_handle_t adc2_handle = get_adc2_handle();
   // adc_cali_handle_t adc2_cali_handle = get_cali_handle_adc2();
 
-  init_single_pcnt_unit(ENCODER_A_PIN, &g_encoderA_pcnt_handle);
-  init_single_pcnt_unit(ENCODER_B_PIN, &g_encoderB_pcnt_handle);
-
   init_motor_control();
 
   init_timer();
@@ -126,7 +120,7 @@ extern void app_main(void)
 
     set_motors_duty(500, 500);
     vTaskDelay(pdMS_TO_TICKS(1000));
-    // printf("[DEBUG]: obroty B = %d\n", get_B_rotations(g_encoderB_pcnt_handle));
+    // printf("[DEBUG]: obroty B = %d\n", get_encB_count(g_encoderB_pcnt_handle));
     // printf("[DEBUG]: predkosc chwilowa = %d\n", g_encoder_B_ticks_per_s);
 
     i++;

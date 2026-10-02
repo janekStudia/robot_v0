@@ -101,7 +101,9 @@ void update_line_sensor_table(int *line_sensor_table, adc_oneshot_unit_handle_t 
   int voltage_mV_curr;
 
   static const adc_channel_t table_of_adc1_channels[] = {REFLECTIVE_SENSOR_D1_CHANNEL,
-                                                         REFLECTIVE_SENSOR_D2_CHANNEL, REFLECTIVE_SENSOR_D3_CHANNEL, REFLECTIVE_SENSOR_D4_CHANNEL,
+                                                         REFLECTIVE_SENSOR_D2_CHANNEL,
+                                                         REFLECTIVE_SENSOR_D3_CHANNEL,
+                                                         REFLECTIVE_SENSOR_D4_CHANNEL,
                                                          REFLECTIVE_SENSOR_D5_CHANNEL};
 
   static const adc_channel_t table_of_adc2_channels[] = {REFLECTIVE_SENSOR_D6_CHANNEL,
