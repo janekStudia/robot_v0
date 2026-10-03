@@ -4,6 +4,8 @@
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 
+#include "driver/gpio.h"
+
 // ADC1:
 #define SOC_ADC_CHANNEL ADC_CHANNEL_0
 #define REFLECTIVE_SENSOR_D1_CHANNEL ADC_CHANNEL_3
@@ -18,6 +20,11 @@
 #define REFLECTIVE_SENSOR_D8_CHANNEL ADC_CHANNEL_7
 
 #define VOLTAGE_DIVIDER_BMS 3
+
+#define LED_ON_PIN GPIO_NUM_14
+#define LEDS_ENABLED 1
+#define LEDS_DISABLED 0
+#define LED_CONTROL_PINS_MASK (1ULL << LED_ON_PIN)
 
 static adc_oneshot_unit_handle_t adc1_handle = NULL;
 static adc_cali_handle_t adc1_cali_handle = NULL;
@@ -92,6 +99,17 @@ static adc_cali_handle_t get_cali_handle_adc2(void)
   return adc2_cali_handle;
 }
 
+static void init_led_on_pin()
+{
+  gpio_config_t led_on_pin_conf = {
+      .pin_bit_mask = LED_CONTROL_PINS_MASK,
+      .mode = GPIO_MODE_OUTPUT,
+      .pull_up_en = GPIO_PULLUP_DISABLE,
+      .pull_down_en = GPIO_PULLDOWN_ENABLE, // zacznie od stanu niskiego
+      .intr_type = GPIO_INTR_DISABLE};      // bez przerwan
+  ESP_ERROR_CHECK(gpio_config(&led_on_pin_conf));
+}
+
 void init_both_adc_units(void)
 {
   adc1_handle = get_adc1_handle();
@@ -99,6 +117,8 @@ void init_both_adc_units(void)
 
   adc2_handle = get_adc2_handle();
   adc2_cali_handle = get_cali_handle_adc2();
+
+  init_led_on_pin();
 }
 
 int get_battery_voltage_mV(void)
@@ -193,6 +213,16 @@ void update_line_sensor_table(int *line_sensor_table)
   adc_oneshot_read(adc2_handle, REFLECTIVE_SENSOR_D8_CHANNEL, &raw_adc_curr);
   adc_cali_raw_to_voltage(adc2_cali_handle, raw_adc_curr, &voltage_mV_curr);
   line_sensor_table[7] = voltage_mV_curr;
+}
+
+void rs_enable_leds(void)
+{
+  gpio_set_level(LED_ON_PIN, LEDS_ENABLED);
+}
+
+void rs_disable_leds(void)
+{
+  gpio_set_level(LED_ON_PIN, LEDS_DISABLED);
 }
 
 // TODO dorobic do wszystkich funckji zwracajacych esp_ok akcje w przypadku kiedy nie wystapi esp_ok, co przekazac dalej? najlawtiej moze byc nie zwracac niczego z funkcji tylko pracowac na kopiach tak zeby nie trzeba bylo zwracac jakiejsc arbitralnej funkcji tylko zwrocic sukces porazka i w funkcji wywolujacej rozwiazywac sytuacje pojawienia sie bledu. Ewnetualnie jakies lepsze operaowanie na typach bledow. Generalnie trzeba bedzie uzbroic kod w przyszlosci.

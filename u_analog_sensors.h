@@ -9,3 +9,7 @@ int get_soc_from_voltage(int voltage_mV);
 int get_soc(void);
 
 void update_line_sensor_table(int *line_sensor_table);
+
+void rs_enable_leds(void);
+
+void rs_disable_leds(void);
