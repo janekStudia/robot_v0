@@ -4,6 +4,8 @@
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
 
+#include "esp_rom_sys.h"
+
 #include "driver/gpio.h"
 
 // ADC1:
@@ -111,6 +113,16 @@ static adc_cali_handle_t get_cali_handle_adc2(void)
   return adc2_cali_handle;
 }
 
+static void rs_enable_leds(void)
+{
+  gpio_set_level(LED_ON_PIN, LEDS_ENABLED);
+}
+
+static void rs_disable_leds(void)
+{
+  gpio_set_level(LED_ON_PIN, LEDS_DISABLED);
+}
+
 static void init_led_on_pin()
 {
   gpio_config_t led_on_pin_conf = {
@@ -131,6 +143,7 @@ void init_both_adc_units(void)
   adc2_cali_handle = get_cali_handle_adc2();
 
   init_led_on_pin();
+  rs_disable_leds();
 }
 
 int get_battery_voltage_mV(void)
@@ -227,22 +240,17 @@ void update_line_sensor_table(int *line_sensor_table)
       REFLECTIVE_SENSOR_D8_CHANNEL,
   };
 
+  rs_enable_leds();
+  esp_rom_delay_us(20);
+
   for (int i = 0; i < NUM_OF_SENSOR_CHANNELS; i++)
   {
     adc_oneshot_read(rs_unit_handles_table[i], rs_channels_table[i], &raw_adc_curr);
     adc_cali_raw_to_voltage(rs_cali_handles_table[i], raw_adc_curr, &voltage_mV_curr);
+    // line_sensor_table[i] = voltage_mV_curr > 1000 ? 1 : 0;
     line_sensor_table[i] = voltage_mV_curr;
   }
-}
-
-void rs_enable_leds(void)
-{
-  gpio_set_level(LED_ON_PIN, LEDS_ENABLED);
-}
-
-void rs_disable_leds(void)
-{
-  gpio_set_level(LED_ON_PIN, LEDS_DISABLED);
+  rs_disable_leds();
 }
 
 // TODO dorobic do wszystkich funckji zwracajacych esp_ok akcje w przypadku kiedy nie wystapi esp_ok, co przekazac dalej? najlawtiej moze byc nie zwracac niczego z funkcji tylko pracowac na kopiach tak zeby nie trzeba bylo zwracac jakiejsc arbitralnej funkcji tylko zwrocic sukces porazka i w funkcji wywolujacej rozwiazywac sytuacje pojawienia sie bledu. Ewnetualnie jakies lepsze operaowanie na typach bledow. Generalnie trzeba bedzie uzbroic kod w przyszlosci.

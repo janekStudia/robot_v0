@@ -13,8 +13,8 @@
 #include "u_analog_sensors.h"
 
 #define RS_DATA_TABLE_SIZE 8
-#define MAX_PWM_OUTPUT_DIFF_P_CONTROLER 105
-#define MAX_RS_DIFFERENCE_P_CONTROLER 2200
+#define MAX_PWM_OUTPUT_DIFF_P_CONTROLER 200
+#define MAX_RS_ERROR_VAL_P_CONTROLER (3 * 2500)
 
 void read_battery_level_uart_debug(void)
 {
@@ -53,53 +53,70 @@ void loop_pattern_straigh_line(void)
   }
 }
 
-void loop_print_rs_output(void)
-{ // RS = Reflective Sensor
-  int rs_value_table[RS_DATA_TABLE_SIZE - 1];
-  rs_enable_leds();
-  while (true)
-  {
-    update_line_sensor_table(rs_value_table);
-    printf("[DEBUG] rs_value_table contents(1-8) in mV = [ ");
-
-    for (int i = 0; i < RS_DATA_TABLE_SIZE; i++)
-    {
-      printf("%d:%d ", i + 1, rs_value_table[i]);
-    }
-    printf("]\n");
-
-    vTaskDelay(pdMS_TO_TICKS(500));
-  }
-}
-
 void u_print_rs_value_table(const int *rs_value_table)
 {
   printf("[DEBUG] rs_value_table contents(1-8) in mV = [ ");
 
   for (int i = 0; i < RS_DATA_TABLE_SIZE; i++)
   {
-    printf("%d:%d ", i + 1, rs_value_table[i]);
+    printf("%d ", rs_value_table[i]);
   }
   printf("]\n");
 }
 
-void loop_simple_line_pid(void)
+void loop_print_rs_output(void)
 { // RS = Reflective Sensor
   int rs_value_table[RS_DATA_TABLE_SIZE - 1];
-  rs_enable_leds();
+  while (true)
+  {
+    update_line_sensor_table(rs_value_table);
+    u_print_rs_value_table(rs_value_table);
+    vTaskDelay(pdMS_TO_TICKS(500));
+  }
+}
+
+void loop_simple_line_p(void)
+{ // RS = Reflective Sensor
+  int rs_value_table[RS_DATA_TABLE_SIZE - 1];
   int pwm_forward = 200;
   set_motors_duty(pwm_forward, pwm_forward);
   while (true)
   {
     update_line_sensor_table(rs_value_table);
-    u_print_rs_value_table(rs_value_table);
+    // u_print_rs_value_table(rs_value_table);
 
     int p_error = rs_value_table[5] - rs_value_table[6];
-    int p_result = ((MAX_PWM_OUTPUT_DIFF_P_CONTROLER * p_error) / 2) / MAX_RS_DIFFERENCE_P_CONTROLER;
-    printf("[DEBUG] p_error=%d, p_result=%d\n", p_error, p_result);
+    int p_result = ((MAX_PWM_OUTPUT_DIFF_P_CONTROLER * p_error) / 2) / MAX_RS_ERROR_VAL_P_CONTROLER;
+    // printf("[DEBUG] p_error=%d, p_result=%d\n", p_error, p_result);
     set_motors_duty(pwm_forward - p_result, pwm_forward + p_result);
 
-    vTaskDelay(pdMS_TO_TICKS(500));
+    // vTaskDelay(pdMS_TO_TICKS(500));
+  }
+}
+
+void loop_simple_line_p_v2(void)
+{ // RS = Reflective Sensor
+  int rs_value_table[RS_DATA_TABLE_SIZE];
+  int pwm_forward = 200;
+
+  static const int multipliers[RS_DATA_TABLE_SIZE] = {-3, -3, -2, -1, 1, 2, 3, 3};
+
+  set_motors_duty(pwm_forward, pwm_forward);
+  while (true)
+  {
+    update_line_sensor_table(rs_value_table);
+    // u_print_rs_value_table(rs_value_table);
+
+    int p_error = 0;
+    for (int i = 0; i < RS_DATA_TABLE_SIZE; i++)
+    {
+      p_error += rs_value_table[i] * multipliers[i];
+    }
+    int p_result = ((MAX_PWM_OUTPUT_DIFF_P_CONTROLER * p_error) / 2) / MAX_RS_ERROR_VAL_P_CONTROLER;
+    // printf("[DEBUG] p_error=%d, p_result=%d\n", p_error, p_result);
+    set_motors_duty(pwm_forward + p_result, pwm_forward - p_result);
+
+    // vTaskDelay(pdMS_TO_TICKS(500));
   }
 }
 
@@ -112,7 +129,7 @@ extern void app_main(void)
   // --- END INIT ---
 
   // loop_print_rs_output();
-  loop_simple_line_pid();
+  loop_simple_line_p_v2();
   // TODO add a P controler function to follow a simple continous line
   // patrzymy czy srodkowe sa wewnatrz lini (powyzej konkretnego poziomu pochlaniania swiatla) ponizej tego poziomu roznica poziomu realnego od minimalnego to wejscie kontrolera P
   // to rozwiazanie nie rozwiazuje problemu zwiazengo z wyjsciem bardzo poza linie (bo wtedy ani jeden ani drugi nie są w zasiegu i nie wiadomo w ktorą stronę nadrobić)
