@@ -19,6 +19,10 @@
 #define REFLECTIVE_SENSOR_D7_CHANNEL ADC_CHANNEL_9
 #define REFLECTIVE_SENSOR_D8_CHANNEL ADC_CHANNEL_7
 
+#define NUM_OF_SENSOR_CHANNELS 8
+#define NUM_OF_CHANNELS_ADC1 6
+#define NUM_OF_CHANNELS_ADC2 3
+
 #define VOLTAGE_DIVIDER_BMS 3
 
 #define LED_ON_PIN GPIO_NUM_14
@@ -44,12 +48,20 @@ static adc_oneshot_unit_handle_t get_adc1_handle(void)
       .bitwidth = ADC_BITWIDTH_DEFAULT,
       .atten = ADC_ATTEN_DB_12, // 0 - 3.3V
   };
-  ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, SOC_ADC_CHANNEL, &config));
-  ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, REFLECTIVE_SENSOR_D1_CHANNEL, &config));
-  ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, REFLECTIVE_SENSOR_D2_CHANNEL, &config));
-  ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, REFLECTIVE_SENSOR_D3_CHANNEL, &config));
-  ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, REFLECTIVE_SENSOR_D4_CHANNEL, &config));
-  ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, REFLECTIVE_SENSOR_D5_CHANNEL, &config));
+
+  const adc_channel_t adc1_channels_table[NUM_OF_CHANNELS_ADC1] = {
+      SOC_ADC_CHANNEL,
+      REFLECTIVE_SENSOR_D1_CHANNEL,
+      REFLECTIVE_SENSOR_D2_CHANNEL,
+      REFLECTIVE_SENSOR_D3_CHANNEL,
+      REFLECTIVE_SENSOR_D4_CHANNEL,
+      REFLECTIVE_SENSOR_D5_CHANNEL,
+  };
+
+  for (int i = 0; i < NUM_OF_CHANNELS_ADC1; i++)
+  {
+    ESP_ERROR_CHECK(adc_oneshot_config_channel(adc1_handle, adc1_channels_table[i], &config));
+  }
 
   return adc1_handle;
 }
@@ -180,39 +192,47 @@ void update_line_sensor_table(int *line_sensor_table)
   int raw_adc_curr;
   int voltage_mV_curr;
 
-  // adc1
-  adc_oneshot_read(adc1_handle, REFLECTIVE_SENSOR_D1_CHANNEL, &raw_adc_curr);
-  adc_cali_raw_to_voltage(adc1_cali_handle, raw_adc_curr, &voltage_mV_curr);
-  line_sensor_table[0] = voltage_mV_curr;
+  const adc_oneshot_unit_handle_t rs_unit_handles_table[NUM_OF_SENSOR_CHANNELS] = {
+      // 5 from adc1
+      adc1_handle,
+      adc1_handle,
+      adc1_handle,
+      adc1_handle,
+      adc1_handle,
+      // 3 from adc2
+      adc2_handle,
+      adc2_handle,
+      adc2_handle,
+  };
+  const adc_cali_handle_t rs_cali_handles_table[NUM_OF_SENSOR_CHANNELS] = {
+      // 5 from adc1
+      adc1_cali_handle,
+      adc1_cali_handle,
+      adc1_cali_handle,
+      adc1_cali_handle,
+      adc1_cali_handle,
+      // 3 from adc2
+      adc2_cali_handle,
+      adc2_cali_handle,
+      adc2_cali_handle,
+  };
+  static const adc_channel_t rs_channels_table[NUM_OF_SENSOR_CHANNELS] = {
+      REFLECTIVE_SENSOR_D1_CHANNEL,
+      REFLECTIVE_SENSOR_D2_CHANNEL,
+      REFLECTIVE_SENSOR_D3_CHANNEL,
+      REFLECTIVE_SENSOR_D4_CHANNEL,
+      REFLECTIVE_SENSOR_D5_CHANNEL,
+      REFLECTIVE_SENSOR_D6_CHANNEL,
+      REFLECTIVE_SENSOR_D7_CHANNEL,
+      REFLECTIVE_SENSOR_D8_CHANNEL,
+  };
 
-  adc_oneshot_read(adc1_handle, REFLECTIVE_SENSOR_D2_CHANNEL, &raw_adc_curr);
-  adc_cali_raw_to_voltage(adc1_cali_handle, raw_adc_curr, &voltage_mV_curr);
-  line_sensor_table[1] = voltage_mV_curr;
-
-  adc_oneshot_read(adc1_handle, REFLECTIVE_SENSOR_D3_CHANNEL, &raw_adc_curr);
-  adc_cali_raw_to_voltage(adc1_cali_handle, raw_adc_curr, &voltage_mV_curr);
-  line_sensor_table[2] = voltage_mV_curr;
-
-  adc_oneshot_read(adc1_handle, REFLECTIVE_SENSOR_D4_CHANNEL, &raw_adc_curr);
-  adc_cali_raw_to_voltage(adc1_cali_handle, raw_adc_curr, &voltage_mV_curr);
-  line_sensor_table[3] = voltage_mV_curr;
-
-  adc_oneshot_read(adc1_handle, REFLECTIVE_SENSOR_D5_CHANNEL, &raw_adc_curr);
-  adc_cali_raw_to_voltage(adc1_cali_handle, raw_adc_curr, &voltage_mV_curr);
-  line_sensor_table[4] = voltage_mV_curr;
-
-  // adc2
-  adc_oneshot_read(adc2_handle, REFLECTIVE_SENSOR_D6_CHANNEL, &raw_adc_curr);
-  adc_cali_raw_to_voltage(adc2_cali_handle, raw_adc_curr, &voltage_mV_curr);
-  line_sensor_table[5] = voltage_mV_curr;
-
-  adc_oneshot_read(adc2_handle, REFLECTIVE_SENSOR_D7_CHANNEL, &raw_adc_curr);
-  adc_cali_raw_to_voltage(adc2_cali_handle, raw_adc_curr, &voltage_mV_curr);
-  line_sensor_table[6] = voltage_mV_curr;
-
-  adc_oneshot_read(adc2_handle, REFLECTIVE_SENSOR_D8_CHANNEL, &raw_adc_curr);
-  adc_cali_raw_to_voltage(adc2_cali_handle, raw_adc_curr, &voltage_mV_curr);
-  line_sensor_table[7] = voltage_mV_curr;
+  for (int i = 0; i < NUM_OF_SENSOR_CHANNELS; i++)
+  {
+    adc_oneshot_read(rs_unit_handles_table[i], rs_channels_table[i], &raw_adc_curr);
+    adc_cali_raw_to_voltage(rs_cali_handles_table[i], raw_adc_curr, &voltage_mV_curr);
+    line_sensor_table[i] = voltage_mV_curr;
+  }
 }
 
 void rs_enable_leds(void)
