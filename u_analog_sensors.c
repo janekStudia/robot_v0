@@ -30,7 +30,6 @@
 #define LED_ON_PIN GPIO_NUM_14
 #define LEDS_ENABLED 1
 #define LEDS_DISABLED 0
-#define LED_CONTROL_PINS_MASK (1ULL << LED_ON_PIN)
 
 static adc_oneshot_unit_handle_t adc1_handle = NULL;
 static adc_cali_handle_t adc1_cali_handle = NULL;
@@ -125,13 +124,8 @@ static void rs_disable_leds(void)
 
 static void init_led_on_pin()
 {
-  gpio_config_t led_on_pin_conf = {
-      .pin_bit_mask = LED_CONTROL_PINS_MASK,
-      .mode = GPIO_MODE_OUTPUT,
-      .pull_up_en = GPIO_PULLUP_DISABLE,
-      .pull_down_en = GPIO_PULLDOWN_ENABLE, // zacznie od stanu niskiego
-      .intr_type = GPIO_INTR_DISABLE};      // bez przerwan
-  ESP_ERROR_CHECK(gpio_config(&led_on_pin_conf));
+  gpio_reset_pin(LED_ON_PIN);
+  gpio_set_direction(LED_ON_PIN, GPIO_MODE_OUTPUT);
 }
 
 void init_both_adc_units(void)
