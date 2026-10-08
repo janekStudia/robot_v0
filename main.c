@@ -27,6 +27,7 @@ extern void app_main(void)
   init_motor_control();
   init_both_adc_units();
   init_encoders_pcnt_units();
+  init_my_timer();
   // init_indication_led();
   // --- END INIT ---
 

@@ -2,6 +2,7 @@
 
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/timers.h"
 
 #include "u_motors.h"
 #include "u_analog_sensors.h"
@@ -22,6 +23,26 @@ static int rs_values_mask_popcount = 0;
 static int pwm_real_A = PWM_BASE_VALUE;
 static int pwm_real_B = PWM_BASE_VALUE;
 
+static TimerHandle_t xTimer1 = NULL;
+
+static void end_of_manouver_callback(TimerHandle_t xTimer)
+{
+  p_controler_enabled_flag = true;
+  junction_detection_enabled_flag = true;
+  pwm_real_A = PWM_BASE_VALUE;
+  pwm_real_B = PWM_BASE_VALUE;
+}
+
+void init_my_timer(void)
+{
+  xTimer1 = xTimerCreate(
+      "Timer1",
+      pdMS_TO_TICKS(1000),
+      pdFALSE,
+      (void *)0,
+      end_of_manouver_callback);
+}
+
 void update_pwm(void)
 {
   set_motors_duty(pwm_real_A, pwm_real_B);
@@ -40,23 +61,39 @@ void uprint_rs_value_table()
 
 void turn_left(void)
 {
-  set_motors_duty(150, -150);
-  vTaskDelay(pdMS_TO_TICKS(900));
-  set_motors_duty(PWM_BASE_VALUE, PWM_BASE_VALUE);
+  pwm_real_A = 150;
+  pwm_real_B = -150;
+  p_controler_enabled_flag = false;
+  junction_detection_enabled_flag = false;
+  if (xTimer1 != NULL)
+  {
+    xTimerStart(xTimer1, pdMS_TO_TICKS(10));
+  }
 }
 
 void turn_right(void)
 {
-  set_motors_duty(-150, 150);
-
-  vTaskDelay(pdMS_TO_TICKS(900));
-  set_motors_duty(PWM_BASE_VALUE, PWM_BASE_VALUE);
+  pwm_real_A = -150;
+  pwm_real_B = 150;
+  p_controler_enabled_flag = false;
+  junction_detection_enabled_flag = false;
+  if (xTimer1 != NULL)
+  {
+    xTimerStart(xTimer1, pdMS_TO_TICKS(10));
+  }
   // TODO skalibrowac obrot na ticki enkodera
 }
 
 void skip_junction(void)
 {
-  vTaskDelay(pdMS_TO_TICKS(600));
+  pwm_real_A = PWM_BASE_VALUE;
+  pwm_real_B = PWM_BASE_VALUE;
+  p_controler_enabled_flag = false;
+  junction_detection_enabled_flag = false;
+  if (xTimer1 != NULL)
+  {
+    xTimerStart(xTimer1, pdMS_TO_TICKS(10));
+  }
   // TODO zmienic delay na wylaczenie flagi p_controlera, powrotu do petli glownej i odlozenie w czasie wlaczenie jej spowrotem
 }
 

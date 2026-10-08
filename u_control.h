@@ -1,5 +1,7 @@
 #pragma once
 
+void init_my_timer(void);
+
 void update_pwm(void);
 
 void uprint_rs_value_table();
