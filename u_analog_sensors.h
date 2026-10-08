@@ -8,4 +8,4 @@ int get_soc_from_voltage(int voltage_mV);
 
 int get_soc(void);
 
-void update_line_sensor_table(int *line_sensor_table);
+void update_line_sensor_table(int *line_sensor_table, int *line_mask_ptr, int *line_mask_popcount_ptr);

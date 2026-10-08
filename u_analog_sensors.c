@@ -31,6 +31,8 @@
 #define LEDS_ENABLED 1
 #define LEDS_DISABLED 0
 
+#define MIN_RS_VALUE_TO_BE_ON_LINE 2000
+
 static adc_oneshot_unit_handle_t adc1_handle = NULL;
 static adc_cali_handle_t adc1_cali_handle = NULL;
 
@@ -194,8 +196,11 @@ int get_soc(void)
   return get_soc_from_voltage(get_battery_voltage_mV());
 }
 
-void update_line_sensor_table(int *line_sensor_table)
+void update_line_sensor_table(int *line_sensor_table, int *line_mask_ptr, int *line_mask_popcount_ptr)
 {
+  int local_mask = 0;
+  int local_mask_popcount = 0;
+
   int raw_adc_curr;
   int voltage_mV_curr;
 
@@ -241,9 +246,17 @@ void update_line_sensor_table(int *line_sensor_table)
   {
     adc_oneshot_read(rs_unit_handles_table[i], rs_channels_table[i], &raw_adc_curr);
     adc_cali_raw_to_voltage(rs_cali_handles_table[i], raw_adc_curr, &voltage_mV_curr);
-    // line_sensor_table[i] = voltage_mV_curr > 1000 ? 1 : 0;
+    local_mask <<= 1;
+    if (voltage_mV_curr > MIN_RS_VALUE_TO_BE_ON_LINE)
+    {
+      local_mask |= 1;
+      local_mask_popcount++;
+    }
     line_sensor_table[i] = voltage_mV_curr;
   }
+
+  *line_mask_ptr = local_mask;
+  *line_mask_popcount_ptr = local_mask_popcount;
   rs_disable_leds();
 }
 
