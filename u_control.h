@@ -14,6 +14,8 @@ void skip_junction(void);
 
 void go_forward(int steps);
 
+void turn(int degrees);
+
 void manouver_ended(void);
 
 void check_steps(void);

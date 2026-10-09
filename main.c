@@ -33,8 +33,8 @@ extern void app_main(void)
   vTaskDelay(pdMS_TO_TICKS(3000));
   // set_motors_duty(200, 200);
 
-  go_forward(200);
-
+  // go_forward(100);
+  turn(90);
   while (true)
   {
     update_rs_values();

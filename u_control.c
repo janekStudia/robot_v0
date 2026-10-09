@@ -12,7 +12,7 @@
 #define MAX_PWM_OUTPUT_DIFF_P_LINE_CONTROLER 200
 #define MAX_RS_ERROR_VAL_P_CONTROLER (3 * 2500)
 
-#define MAX_PWM_OUTPUT_DIFF_P_MANOUVER_CONTROLER 50
+#define MAX_PWM_OUTPUT_DIFF_P_MANOUVER_CONTROLER 70
 #define MAX_STEP_DIFF_ERROR_VAL_P_CONTROLER 10
 
 #define PWM_BASE_VALUE 200
@@ -52,12 +52,6 @@ void uprint_rs_value_table()
   printf("]\n");
 }
 
-void turn(int degrees)
-{
-  p_line_controler_enabled_flag = false;
-  junction_detection_enabled_flag = false;
-}
-
 void go_forward(int steps)
 {
   goal_steps_A = steps;
@@ -70,6 +64,23 @@ void go_forward(int steps)
 
   pwm_manouver_A = 200;
   pwm_manouver_B = 200;
+
+  p_line_controler_enabled_flag = false;
+  junction_detection_enabled_flag = false;
+}
+
+void turn(int degrees)
+{
+  goal_steps_A = abs((10 * 314 * degrees * 130) / (100 * 100 * 360));
+  goal_steps_B = abs((10 * 314 * degrees * 130) / (100 * 100 * 360));
+
+  p_manouver_controler_enabled_flag = true;
+  step_check_enabled_flag = true;
+
+  clear_both_encoders_count();
+
+  pwm_manouver_A = degrees > 0 ? 500 : -500;
+  pwm_manouver_B = degrees > 0 ? -500 : 500;
 
   p_line_controler_enabled_flag = false;
   junction_detection_enabled_flag = false;
@@ -93,18 +104,20 @@ void check_steps(void)
     return;
   }
   // printf("a_count:%d, b_count:%d, pwm_real_a:%d pwm_real_b:%d\n", get_encA_count(), get_encB_count(), pwm_real_A, pwm_real_B);
-  if (get_encB_count() >= goal_steps_B && get_encA_count() >= goal_steps_A)
+  int curr_encB_count = get_encB_count();
+  int curr_encA_count = get_encA_count();
+  if (curr_encB_count >= goal_steps_B && curr_encA_count >= goal_steps_A)
   {
     manouver_ended();
     return;
   }
 
-  if (get_encA_count() >= goal_steps_A)
+  if (curr_encA_count >= goal_steps_A)
   {
     p_manouver_controler_enabled_flag = false;
     pwm_real_A = 0;
   }
-  if (get_encB_count() >= goal_steps_B)
+  if (curr_encB_count >= goal_steps_B)
   {
     p_manouver_controler_enabled_flag = false;
     pwm_real_B = 0;
@@ -120,8 +133,8 @@ void p_manouver_controler(void)
 
   int p_error = get_encA_count() - get_encB_count();
   int p_result = ((MAX_PWM_OUTPUT_DIFF_P_MANOUVER_CONTROLER * p_error) / 2) / MAX_STEP_DIFF_ERROR_VAL_P_CONTROLER;
-  pwm_real_A = pwm_manouver_A - p_result;
-  pwm_real_B = pwm_manouver_B + p_result;
+  pwm_real_A = pwm_manouver_A > 0 ? pwm_manouver_A - p_result : pwm_manouver_A + p_result;
+  pwm_real_B = pwm_manouver_B > 0 ? pwm_manouver_B + p_result : pwm_manouver_B + p_result;
 }
 
 void junction_detector(void)
