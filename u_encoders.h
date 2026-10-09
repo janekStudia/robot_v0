@@ -1,6 +1,6 @@
 #pragma once
 
-void init_encoders_pcnt_units(void);
+void init_and_start_encoders_pcnt_units(void);
 
 int get_encA_count(void);
 

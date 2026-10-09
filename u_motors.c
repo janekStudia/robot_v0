@@ -54,7 +54,7 @@ void wake_up_motors(void)
   gpio_set_level(STBY_MC_PIN, STBY_ACTIVATE_ENGINE);
 }
 
-static void init_dual_pwm(void)
+static inline void init_dual_pwm(void)
 {
   ledc_timer_config_t timer_conf = {
       .speed_mode = LEDC_MODE,
@@ -92,7 +92,7 @@ static void init_dual_pwm(void)
   ESP_ERROR_CHECK(ledc_channel_config(&ch_mB_conf));
 }
 
-void init_motor_control(void)
+inline void init_motor_control(void)
 {
   gpio_config_t mc_output_pins_conf = {
       .pin_bit_mask = MC_OUTPUT_PINS_MASK,

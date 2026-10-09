@@ -6,42 +6,35 @@
 
 #include "u_motors.h"
 #include "u_analog_sensors.h"
+#include "u_encoders.h"
 
 #define RS_DATA_TABLE_SIZE 8
-#define MAX_PWM_OUTPUT_DIFF_P_CONTROLER 200
+#define MAX_PWM_OUTPUT_DIFF_P_LINE_CONTROLER 200
 #define MAX_RS_ERROR_VAL_P_CONTROLER (3 * 2500)
+
+#define MAX_PWM_OUTPUT_DIFF_P_MANOUVER_CONTROLER 50
+#define MAX_STEP_DIFF_ERROR_VAL_P_CONTROLER 10
 
 #define PWM_BASE_VALUE 200
 
-volatile static int p_controler_enabled_flag = true;
+volatile static int p_line_controler_enabled_flag = true;
 volatile static int junction_detection_enabled_flag = true;
+
+volatile static int p_manouver_controler_enabled_flag = false;
+volatile static int step_check_enabled_flag = false;
 
 static int rs_values_table[RS_DATA_TABLE_SIZE] = {0};
 static int rs_values_mask = 0;
 static int rs_values_mask_popcount = 0;
 
+static int goal_steps_A = 0;
+static int goal_steps_B = 0;
+
+static int pwm_manouver_A = 0;
+static int pwm_manouver_B = 0;
+
 static int pwm_real_A = PWM_BASE_VALUE;
 static int pwm_real_B = PWM_BASE_VALUE;
-
-static TimerHandle_t xTimer1 = NULL;
-
-static void end_of_manouver_callback(TimerHandle_t xTimer)
-{
-  p_controler_enabled_flag = true;
-  junction_detection_enabled_flag = true;
-  pwm_real_A = PWM_BASE_VALUE;
-  pwm_real_B = PWM_BASE_VALUE;
-}
-
-void init_my_timer(void)
-{
-  xTimer1 = xTimerCreate(
-      "Timer1",
-      pdMS_TO_TICKS(1000),
-      pdFALSE,
-      (void *)0,
-      end_of_manouver_callback);
-}
 
 void update_pwm(void)
 {
@@ -59,42 +52,76 @@ void uprint_rs_value_table()
   printf("]\n");
 }
 
-void turn_left(void)
+void turn(int degrees)
 {
-  pwm_real_A = 150;
-  pwm_real_B = -150;
-  p_controler_enabled_flag = false;
+  p_line_controler_enabled_flag = false;
   junction_detection_enabled_flag = false;
-  if (xTimer1 != NULL)
+}
+
+void go_forward(int steps)
+{
+  goal_steps_A = steps;
+  goal_steps_B = steps;
+
+  p_manouver_controler_enabled_flag = true;
+  step_check_enabled_flag = true;
+
+  clear_both_encoders_count();
+
+  pwm_manouver_A = 200;
+  pwm_manouver_B = 200;
+
+  p_line_controler_enabled_flag = false;
+  junction_detection_enabled_flag = false;
+}
+
+void manouver_ended(void)
+{
+  p_manouver_controler_enabled_flag = false;
+  step_check_enabled_flag = false;
+  clear_both_encoders_count();
+  pwm_real_B = 0;
+  pwm_real_B = 0;
+  // p_line_controler_enabled_flag = true;
+  // junction_detection_enabled_flag = true;
+}
+
+void check_steps(void)
+{
+  if (!step_check_enabled_flag)
   {
-    xTimerStart(xTimer1, pdMS_TO_TICKS(10));
+    return;
+  }
+  // printf("a_count:%d, b_count:%d, pwm_real_a:%d pwm_real_b:%d\n", get_encA_count(), get_encB_count(), pwm_real_A, pwm_real_B);
+  if (get_encB_count() >= goal_steps_B && get_encA_count() >= goal_steps_A)
+  {
+    manouver_ended();
+    return;
+  }
+
+  if (get_encA_count() >= goal_steps_A)
+  {
+    p_manouver_controler_enabled_flag = false;
+    pwm_real_A = 0;
+  }
+  if (get_encB_count() >= goal_steps_B)
+  {
+    p_manouver_controler_enabled_flag = false;
+    pwm_real_B = 0;
   }
 }
 
-void turn_right(void)
+void p_manouver_controler(void)
 {
-  pwm_real_A = -150;
-  pwm_real_B = 150;
-  p_controler_enabled_flag = false;
-  junction_detection_enabled_flag = false;
-  if (xTimer1 != NULL)
+  if (!p_manouver_controler_enabled_flag)
   {
-    xTimerStart(xTimer1, pdMS_TO_TICKS(10));
+    return;
   }
-  // TODO skalibrowac obrot na ticki enkodera
-}
 
-void skip_junction(void)
-{
-  pwm_real_A = PWM_BASE_VALUE;
-  pwm_real_B = PWM_BASE_VALUE;
-  p_controler_enabled_flag = false;
-  junction_detection_enabled_flag = false;
-  if (xTimer1 != NULL)
-  {
-    xTimerStart(xTimer1, pdMS_TO_TICKS(10));
-  }
-  // TODO zmienic delay na wylaczenie flagi p_controlera, powrotu do petli glownej i odlozenie w czasie wlaczenie jej spowrotem
+  int p_error = get_encA_count() - get_encB_count();
+  int p_result = ((MAX_PWM_OUTPUT_DIFF_P_MANOUVER_CONTROLER * p_error) / 2) / MAX_STEP_DIFF_ERROR_VAL_P_CONTROLER;
+  pwm_real_A = pwm_manouver_A - p_result;
+  pwm_real_B = pwm_manouver_B + p_result;
 }
 
 void junction_detector(void)
@@ -117,15 +144,15 @@ void junction_detector(void)
   if (on_junction_counter > 20)
   {
     // code for when on junction for sure
-    turn_left();
+    // turn_left();
     on_junction_counter = 0;
     return;
   }
 }
 
-void p_controler(void)
+void p_line_controler(void)
 { // RS = Reflective Sensor
-  if (!p_controler_enabled_flag)
+  if (!p_line_controler_enabled_flag)
   {
     return;
   }
@@ -137,7 +164,7 @@ void p_controler(void)
     p_error += rs_values_table[i] * multipliers[i];
   }
 
-  int p_result = ((MAX_PWM_OUTPUT_DIFF_P_CONTROLER * p_error) / 2) / MAX_RS_ERROR_VAL_P_CONTROLER;
+  int p_result = ((MAX_PWM_OUTPUT_DIFF_P_LINE_CONTROLER * p_error) / 2) / MAX_RS_ERROR_VAL_P_CONTROLER;
   pwm_real_A = PWM_BASE_VALUE + p_result;
   pwm_real_B = PWM_BASE_VALUE - p_result;
 }

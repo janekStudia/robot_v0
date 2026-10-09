@@ -26,20 +26,28 @@ extern void app_main(void)
   // --- INIT ---
   init_motor_control();
   init_both_adc_units();
-  init_encoders_pcnt_units();
-  init_my_timer();
+  init_and_start_encoders_pcnt_units();
   // init_indication_led();
   // --- END INIT ---
 
   vTaskDelay(pdMS_TO_TICKS(3000));
-  set_motors_duty(200, 200);
+  // set_motors_duty(200, 200);
+
+  go_forward(200);
+
   while (true)
   {
     update_rs_values();
     junction_detector();
-    p_controler();
+    p_line_controler();
+    p_manouver_controler();
+    check_steps();
+
     update_pwm();
+    vTaskDelay(pdMS_TO_TICKS(10));
   }
 
   // read_battery_level_uart_debug(adc1_handle, adc1_cali_handle);
 }
+
+// TODO poprawic pliki naglowkowe

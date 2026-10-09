@@ -16,7 +16,7 @@
 static pcnt_unit_handle_t encA_pcnt_handle = NULL;
 static pcnt_unit_handle_t encB_pcnt_handle = NULL;
 
-static void init_single_pcnt_unit(int gpio_pin, pcnt_unit_handle_t *unit_handle)
+static inline void init_and_start_single_pcnt_unit(int gpio_pin, pcnt_unit_handle_t *unit_handle)
 {
   pcnt_unit_config_t unit_config = {
       .low_limit = PCNT_LOW_LIMIT,
@@ -46,10 +46,10 @@ static void init_single_pcnt_unit(int gpio_pin, pcnt_unit_handle_t *unit_handle)
   ESP_ERROR_CHECK(pcnt_unit_start(*unit_handle));
 }
 
-void init_encoders_pcnt_units(void)
+inline void init_and_start_encoders_pcnt_units(void)
 {
-  init_single_pcnt_unit(ENCODER_A_PIN, &encA_pcnt_handle);
-  init_single_pcnt_unit(ENCODER_B_PIN, &encB_pcnt_handle);
+  init_and_start_single_pcnt_unit(ENCODER_A_PIN, &encA_pcnt_handle);
+  init_and_start_single_pcnt_unit(ENCODER_B_PIN, &encB_pcnt_handle);
 }
 
 int get_encA_count(void)

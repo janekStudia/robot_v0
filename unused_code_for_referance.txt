@@ -17,3 +17,26 @@ void init_timer()
 }
 
 ---
+
+static TimerHandle_t xTimer1 = NULL;
+
+static void end_of_manouver_callback(TimerHandle_t xTimer)
+{
+  p_controler_enabled_flag = true;
+  junction_detection_enabled_flag = true;
+  pwm_real_A = PWM_BASE_VALUE;
+  pwm_real_B = PWM_BASE_VALUE;
+}
+
+void init_my_timer(void)
+{
+  xTimer1 = xTimerCreate(
+      "Timer1",
+      pdMS_TO_TICKS(1000),
+      pdFALSE,
+      (void *)0,
+      end_of_manouver_callback);
+}
+
+
+---
