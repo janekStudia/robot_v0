@@ -40,3 +40,22 @@ void init_my_timer(void)
 
 
 ---
+
+void turn(int degrees)
+{
+  goal_steps_A = abs((10 * 314 * degrees * 130) / (100 * 100 * 360));
+  goal_steps_B = abs((10 * 314 * degrees * 130) / (100 * 100 * 360));
+
+  p_manoeuvre_controler_enabled_flag = true;
+  step_check_enabled_flag = true;
+
+  clear_both_encoders_count();
+
+  base_speed_pwm_A = degrees > 0 ? 500 : -500;
+  base_speed_pwm_B = degrees > 0 ? -500 : 500;
+
+  p_line_controler_enabled_flag = false;
+  junction_detection_enabled_flag = false;
+}
+
+---

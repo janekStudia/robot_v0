@@ -21,6 +21,17 @@ void read_battery_level_uart_debug(void)
   printf("soc[prc]: = %d\n", get_soc_from_voltage(voltage_mV));
 }
 
+void control_task(void *arg)
+{
+  TickType_t last_wake = xTaskGetTickCount();
+
+  for (;;)
+  {
+    control_loop();
+    vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(10));
+  }
+}
+
 extern void app_main(void)
 {
   // --- INIT ---
@@ -30,24 +41,22 @@ extern void app_main(void)
   // init_indication_led();
   // --- END INIT ---
 
-  vTaskDelay(pdMS_TO_TICKS(3000));
-  // set_motors_duty(200, 200);
+  xTaskCreate(
+      control_task,   // Wskaźnik na funkcję zadania
+      "control_task", // Nazwa własna zadania (do debugowania)
+      2048,           // Rozmiar stosu w słowach/bajtach
+      NULL,           // Parametr przekazywany do zadania (arg)
+      5,              // Priorytet zadania (wyższy numer = wyższy priorytet)
+      NULL            // Uchwyt zadania (TaskHandle_t), opcjonalnie NULL
+  );
 
-  // go_forward(100);
-  turn(90);
-  while (true)
+  vTaskDelay(pdMS_TO_TICKS(2000));
+
+  start_line_following(200);
+  for (;;)
   {
-    update_rs_values();
-    junction_detector();
-    p_line_controler();
-    p_manouver_controler();
-    check_steps();
-
-    update_pwm();
     vTaskDelay(pdMS_TO_TICKS(10));
   }
-
-  // read_battery_level_uart_debug(adc1_handle, adc1_cali_handle);
 }
 
-// TODO poprawic pliki naglowkowe
+// [ ] poprawic pliki naglowkowe

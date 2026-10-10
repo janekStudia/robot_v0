@@ -1,27 +1,35 @@
 #include "u_control.h"
 
+#include "config.h"
+
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/timers.h"
+
+#include "esp_log.h"
 
 #include "u_motors.h"
 #include "u_analog_sensors.h"
 #include "u_encoders.h"
 
 #define RS_DATA_TABLE_SIZE 8
-#define MAX_PWM_OUTPUT_DIFF_P_LINE_CONTROLER 200
-#define MAX_RS_ERROR_VAL_P_CONTROLER (3 * 2500)
 
-#define MAX_PWM_OUTPUT_DIFF_P_MANOUVER_CONTROLER 70
-#define MAX_STEP_DIFF_ERROR_VAL_P_CONTROLER 10
+typedef enum
+{
+  CONTROL_STATE_STOPPED,
+  CONTROL_STATE_LINE_FOLLOWING,
+  CONTROL_STATE_MANOEUVRE
+} control_state_t;
 
-#define PWM_BASE_VALUE 200
+static control_state_t control_state = CONTROL_STATE_STOPPED;
 
-volatile static int p_line_controler_enabled_flag = true;
-volatile static int junction_detection_enabled_flag = true;
+// volatile static int p_line_controler_enabled_flag = true;
+// volatile static int junction_detection_enabled_flag = true;
 
-volatile static int p_manouver_controler_enabled_flag = false;
-volatile static int step_check_enabled_flag = false;
+// volatile static int p_manoeuvre_controler_enabled_flag = false;
+// volatile static int step_check_enabled_flag = false;
+
+// static const char *TAG = "u_control";
 
 static int rs_values_table[RS_DATA_TABLE_SIZE] = {0};
 static int rs_values_mask = 0;
@@ -30,16 +38,13 @@ static int rs_values_mask_popcount = 0;
 static int goal_steps_A = 0;
 static int goal_steps_B = 0;
 
-static int pwm_manouver_A = 0;
-static int pwm_manouver_B = 0;
+static int base_speed_pwm_A = 0;
+static int base_speed_pwm_B = 0;
 
-static int pwm_real_A = PWM_BASE_VALUE;
-static int pwm_real_B = PWM_BASE_VALUE;
+static int pwm_A = 0;
+static int pwm_B = 0;
 
-void update_pwm(void)
-{
-  set_motors_duty(pwm_real_A, pwm_real_B);
-}
+// [ ] change pairs of values into structs
 
 void uprint_rs_value_table()
 {
@@ -52,94 +57,91 @@ void uprint_rs_value_table()
   printf("]\n");
 }
 
-void go_forward(int steps)
+void start_manoeuvre(int steps_A, int steps_B, int speed_pwm)
 {
-  goal_steps_A = steps;
-  goal_steps_B = steps;
+  if (steps_A >= 0)
+  {
+    goal_steps_A = steps_A;
+    base_speed_pwm_A = speed_pwm;
+  }
+  else
+  {
+    goal_steps_A = -steps_A;
+    base_speed_pwm_A = -speed_pwm;
+  }
+  if (steps_B >= 0)
+  {
+    goal_steps_B = steps_B;
+    base_speed_pwm_B = speed_pwm;
+  }
+  else
+  {
+    goal_steps_B = -steps_B;
+    base_speed_pwm_B = -speed_pwm;
+  }
 
-  p_manouver_controler_enabled_flag = true;
-  step_check_enabled_flag = true;
+  control_state = CONTROL_STATE_MANOEUVRE;
 
   clear_both_encoders_count();
-
-  pwm_manouver_A = 200;
-  pwm_manouver_B = 200;
-
-  p_line_controler_enabled_flag = false;
-  junction_detection_enabled_flag = false;
 }
 
-void turn(int degrees)
+void start_stopped_state(void)
 {
-  goal_steps_A = abs((10 * 314 * degrees * 130) / (100 * 100 * 360));
-  goal_steps_B = abs((10 * 314 * degrees * 130) / (100 * 100 * 360));
-
-  p_manouver_controler_enabled_flag = true;
-  step_check_enabled_flag = true;
-
-  clear_both_encoders_count();
-
-  pwm_manouver_A = degrees > 0 ? 500 : -500;
-  pwm_manouver_B = degrees > 0 ? -500 : 500;
-
-  p_line_controler_enabled_flag = false;
-  junction_detection_enabled_flag = false;
+  control_state = CONTROL_STATE_STOPPED;
+  pwm_A = 0;
+  pwm_B = 0;
 }
 
-void manouver_ended(void)
+void start_line_following(int speed_pwm)
 {
-  p_manouver_controler_enabled_flag = false;
-  step_check_enabled_flag = false;
-  clear_both_encoders_count();
-  pwm_real_B = 0;
-  pwm_real_B = 0;
-  // p_line_controler_enabled_flag = true;
-  // junction_detection_enabled_flag = true;
+  control_state = CONTROL_STATE_LINE_FOLLOWING;
+  base_speed_pwm_A = speed_pwm;
+  base_speed_pwm_B = speed_pwm;
 }
 
-void check_steps(void)
+static void check_steps(void)
 {
-  if (!step_check_enabled_flag)
+  if (control_state != CONTROL_STATE_MANOEUVRE)
   {
     return;
   }
-  // printf("a_count:%d, b_count:%d, pwm_real_a:%d pwm_real_b:%d\n", get_encA_count(), get_encB_count(), pwm_real_A, pwm_real_B);
-  int curr_encB_count = get_encB_count();
-  int curr_encA_count = get_encA_count();
-  if (curr_encB_count >= goal_steps_B && curr_encA_count >= goal_steps_A)
-  {
-    manouver_ended();
-    return;
-  }
+  // ESP_LOGI(TAG, "%d, %d", get_encB_count(), get_encA_count());
 
-  if (curr_encA_count >= goal_steps_A)
+  if (get_encB_count() >= goal_steps_B && get_encA_count() >= goal_steps_A)
   {
-    p_manouver_controler_enabled_flag = false;
-    pwm_real_A = 0;
-  }
-  if (curr_encB_count >= goal_steps_B)
-  {
-    p_manouver_controler_enabled_flag = false;
-    pwm_real_B = 0;
+    // start_stopped_state();
+    start_line_following(200);
+
+    return;
   }
 }
 
-void p_manouver_controler(void)
+static void p_manoeuvre_controler(void)
 {
-  if (!p_manouver_controler_enabled_flag)
+  if (control_state != CONTROL_STATE_MANOEUVRE)
   {
     return;
   }
 
   int p_error = get_encA_count() - get_encB_count();
-  int p_result = ((MAX_PWM_OUTPUT_DIFF_P_MANOUVER_CONTROLER * p_error) / 2) / MAX_STEP_DIFF_ERROR_VAL_P_CONTROLER;
-  pwm_real_A = pwm_manouver_A > 0 ? pwm_manouver_A - p_result : pwm_manouver_A + p_result;
-  pwm_real_B = pwm_manouver_B > 0 ? pwm_manouver_B + p_result : pwm_manouver_B + p_result;
+  int p_result = ((MAX_PWM_OUTPUT_DIFF_P_MANOEUVRE_CONTROLER * p_error) / 2) / MAX_STEP_DIFF_ERROR_VAL_P_CONTROLER;
+  pwm_A = base_speed_pwm_A > 0 ? base_speed_pwm_A - p_result : base_speed_pwm_A + p_result;
+  pwm_B = base_speed_pwm_B > 0 ? base_speed_pwm_B + p_result : base_speed_pwm_B - p_result;
 }
 
-void junction_detector(void)
+static void manoeuvre_left(void)
 {
-  if (!junction_detection_enabled_flag)
+  start_manoeuvre(11, -11, 400);
+}
+
+static void manoeuvre_right(void)
+{
+  start_manoeuvre(-11, 11, 400);
+}
+
+static void junction_detector(void)
+{
+  if (control_state != CONTROL_STATE_LINE_FOLLOWING)
   {
     return;
   }
@@ -157,15 +159,16 @@ void junction_detector(void)
   if (on_junction_counter > 20)
   {
     // code for when on junction for sure
-    // turn_left();
+    manoeuvre_left();
     on_junction_counter = 0;
     return;
   }
 }
 
-void p_line_controler(void)
-{ // RS = Reflective Sensor
-  if (!p_line_controler_enabled_flag)
+static void p_line_controler(void)
+{
+  // [ ] make controlers variable based on speed
+  if (control_state != CONTROL_STATE_LINE_FOLLOWING)
   {
     return;
   }
@@ -178,11 +181,33 @@ void p_line_controler(void)
   }
 
   int p_result = ((MAX_PWM_OUTPUT_DIFF_P_LINE_CONTROLER * p_error) / 2) / MAX_RS_ERROR_VAL_P_CONTROLER;
-  pwm_real_A = PWM_BASE_VALUE + p_result;
-  pwm_real_B = PWM_BASE_VALUE - p_result;
+  pwm_A = base_speed_pwm_A + p_result;
+  pwm_B = base_speed_pwm_B - p_result;
 }
 
-void update_rs_values(void)
+static void update_rs_values(void)
 {
+  if (control_state != CONTROL_STATE_LINE_FOLLOWING)
+  {
+    return;
+  }
+
   update_line_sensor_table(rs_values_table, &rs_values_mask, &rs_values_mask_popcount);
+}
+
+static void update_pwm(void)
+{
+  set_motors_duty(pwm_A, pwm_B);
+}
+
+void control_loop(void)
+{
+  update_rs_values();
+  p_line_controler();
+  junction_detector();
+
+  p_manoeuvre_controler();
+  check_steps();
+
+  update_pwm();
 }

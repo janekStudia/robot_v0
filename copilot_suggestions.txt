@@ -1,0 +1,414 @@
+I’ll inspect the tagged controller file plus the project layout and build/configuration files, then give you prioritized, concrete practice improvements grounded in what’s actually present.
+
+Read , lines 1 to 240
+Completed with input: {
+  "path": "c:\\folders\\projekty\\rc_car_1\\esp32_code\\robot_v0\\src\\u_control.c",
+  "view_range": [
+    1,
+    240
+  ]
+}
+
+Find files matching `**/*`
+
+Search for `#include|TODO|FIXME|malloc|free|delay|Serial|printf|volatile|ISR|xTaskCreate|...`
+
+The first pass shows a small ESP-IDF/PlatformIO C project, with the main opportunities in correctness, naming, state management, and testability rather than adding more abstraction. I’m checking the neighboring modules now so the recommendations distinguish local issues from project-wide habits.
+
+Read , lines 1 to 200
+Completed with input: {
+  "path": "c:\\folders\\projekty\\rc_car_1\\esp32_code\\robot_v0\\src\\u_control.h",
+  "view_range": [
+    1,
+    200
+  ]
+}
+
+Read , lines 1 to 180
+Completed with input: {
+  "path": "c:\\folders\\projekty\\rc_car_1\\esp32_code\\robot_v0\\src\\main.c",
+  "view_range": [
+    1,
+    180
+  ]
+}
+
+Read , lines 1 to 240
+Completed with input: {
+  "path": "c:\\folders\\projekty\\rc_car_1\\esp32_code\\robot_v0\\src\\u_motors.c",
+  "view_range": [
+    1,
+    240
+  ]
+}
+
+Read , lines 1 to 220
+Completed with input: {
+  "path": "c:\\folders\\projekty\\rc_car_1\\esp32_code\\robot_v0\\src\\u_encoders.c",
+  "view_range": [
+    1,
+    220
+  ]
+}
+
+Read , lines 1 to 340
+Completed with input: {
+  "path": "c:\\folders\\projekty\\rc_car_1\\esp32_code\\robot_v0\\src\\u_analog_sensors.c",
+  "view_range": [
+    1,
+    340
+  ]
+}
+
+Read , lines 1 to 160
+Completed with input: {
+  "path": "c:\\folders\\projekty\\rc_car_1\\esp32_code\\robot_v0\\platformio.ini",
+  "view_range": [
+    1,
+    160
+  ]
+}
+
+I found several concrete defects that are more urgent than style advice, including motor-stop and encoder-reset mistakes and undefined/out-of-bounds indexing in battery estimation. I’m doing one focused line-number pass so I can separate “fix immediately” from longer-term practice improvements.
+
+Ran terminal command: $files = @('src\u_control.c','src\u_encoders.c','src\u_analog_sensors.c','src\u_motors.c','src\main.c','src\u_control.h','.gitignore','src\CMakeLists.txt','CMakeLists.txt'); foreach ($f in $files) { Write-Output "--- $f ---"; $n=0; Get-Content $f | ForEach-Object { $n++; '{0,4}: {1}' -f $n, $_ } }
+
+Read , lines 1 to 160
+Completed with input: {
+  "path": "c:\\folders\\projekty\\rc_car_1\\esp32_code\\robot_v0\\.gitignore",
+  "view_range": [
+    1,
+    160
+  ]
+}
+
+Read , lines 1 to 120
+Completed with input: {
+  "path": "c:\\folders\\projekty\\rc_car_1\\esp32_code\\robot_v0\\src\\CMakeLists.txt",
+  "view_range": [
+    1,
+    120
+  ]
+}
+
+Ran terminal command: $f='src\u_control.c'; $n=0; Get-Content $f | ForEach-Object { $n++; if (($n -ge 65 -and $n -le 145) -or ($n -ge 1 -and $n -le 35)) { '{0,4}: {1}' -f $n, $_ } }
+
+Ran terminal command: $f='src\u_encoders.c'; $n=0; Get-Content $f | ForEach-Object { $n++; '{0,4}: {1}' -f $n, $_ }
+
+Ran terminal command: $f='src\u_analog_sensors.c'; $n=0; Get-Content $f | ForEach-Object { $n++; if ($n -ge 105 -and $n -le 175) { '{0,4}: {1}' -f $n, $_ } }
+
+Ran terminal command: $f='src\u_motors.c'; $n=0; Get-Content $f | ForEach-Object { $n++; if ($n -ge 125 -and $n -le 180) { '{0,4}: {1}' -f $n, $_ } }
+
+Ran terminal command: $f='src\main.c'; $n=0; Get-Content $f | ForEach-Object { $n++; '{0,4}: {1}' -f $n, $_ }
+
+Ran terminal command: $f='src\u_analog_sensors.c'; $n=0; Get-Content $f | ForEach-Object { $n++; if ($n -ge 169 -and $n -le 205) { '{0,4}: {1}' -f $n, $_ } }
+
+Ran terminal command: $f='src\u_control.c'; $n=0; Get-Content $f | ForEach-Object { $n++; if ($n -ge 145 -and $n -le 210) { '{0,4}: {1}' -f $n, $_ } }
+
+Ran terminal command: $f='src\u_motors.h'; Get-Content $f; $f='src\u_encoders.h'; Get-Content $f; $f='src\u_analog_sensors.h'; Get-Content $f
+
+I reviewed the workspace, especially `u_control.c`, and the related motor, encoder, sensor, and main modules.
+
+Your project has a reasonable small-module structure, but I would prioritize **correctness and safety first**, then improve maintainability and testing.
+
+## Fix these bugs first
+
+| Priority | Location | Problem |
+|---|---|---|
+| Critical | `u_control.c:94` | `manouver_ended()` sets `pwm_real_B = 0` twice. `pwm_real_A` may remain nonzero, so the robot may continue driving one motor after a maneuver. |
+| Critical | `u_encoders.c:69` | `clear_both_encoders_count()` clears encoder A twice and never clears encoder B. |
+| Critical | `u_analog_sensors.c:173` | `lookup_soc[-1]` is out-of-bounds memory access. It should use the last element based on the array length. |
+| Critical | `u_analog_sensors.c:178` | `sizeof(lookup_soc)` returns the array size in bytes, not the number of rows. The loop can read past the array. |
+| High | `u_analog_sensors.c:188` | Integer division happens too early: `(y1 - y0) / (x1 - x0)` is effectively zero for these values, so interpolation probably returns mostly `y0`. |
+| High | `u_motors.c:163` | PWM duty is clamped for motor B but not motor A. Both values should be clamped to `[0, MOTOR_PWM_FULL]`. |
+| High | `u_control.c:137` | The negative branch for `pwm_real_B` still uses `pwm_manouver_B + p_result`. It likely needs subtraction in one branch. |
+| Medium | `u_control.c:115` | When one encoder reaches its target, the entire maneuver controller is disabled. The other motor then continues without correction. Verify whether this is intentional. |
+
+These are especially important because this code directly controls motors. A small arithmetic or state bug can cause unsafe physical behavior.
+
+## Improve naming and consistency
+
+Names currently make the control logic harder to review:
+
+- `p_manouver_controler` → `maneuver_controller_update`
+- `p_line_controler` → `line_controller_update`
+- `manouver_ended` → `maneuver_end`
+- `RS_DATA_TABLE_SIZE` → `LINE_SENSOR_COUNT`
+- `pwm_real_A` → `motor_a_pwm`
+- `goal_steps_A` → `target_steps_a`
+- `p_manouver_controler_enabled_flag` → `maneuver_controller_enabled`
+
+There are also spelling inconsistencies such as `manouver`, `controler`, and `funckji`. In embedded control code, descriptive names are more valuable than short names because the behavior is stateful and mathematical.
+
+Use a consistent convention, for example:
+
+```c
+static bool line_controller_enabled;
+static bool maneuver_controller_enabled;
+static int motor_a_pwm;
+static int motor_b_pwm;
+```
+
+Since these are flags, use `bool` rather than `int`.
+
+## Replace scattered flags with an explicit state machine
+
+Currently behavior is controlled through several independent flags:
+
+```c
+p_line_controler_enabled_flag
+junction_detection_enabled_flag
+p_manouver_controler_enabled_flag
+step_check_enabled_flag
+```
+
+This permits invalid combinations. For example, multiple controllers could accidentally be enabled or disabled inconsistently.
+
+Use one state instead:
+
+```c
+typedef enum {
+    CONTROL_STATE_LINE_FOLLOWING,
+    CONTROL_STATE_FORWARD_MANEUVER,
+    CONTROL_STATE_TURNING,
+    CONTROL_STATE_STOPPED
+} control_state_t;
+```
+
+Then the main loop can dispatch behavior based on one value. This makes transitions such as “turn finished, resume line following” explicit.
+
+## Separate calculation from hardware effects
+
+Functions like `p_line_controler()` both calculate control output and mutate global motor state. That makes them difficult to test.
+
+Prefer pure calculations:
+
+```c
+typedef struct {
+    int motor_a;
+    int motor_b;
+} motor_command_t;
+
+motor_command_t calculate_line_control(const int *sensor_values);
+```
+
+Then apply the result separately:
+
+```c
+motor_command_t command = calculate_line_control(sensor_values);
+set_motors_duty(command.motor_a, command.motor_b);
+```
+
+This would let you test controller math on a normal computer without an ESP32, motors, ADC, or encoders.
+
+## Check every ESP-IDF return value
+
+Several calls ignore error results:
+
+- `adc_oneshot_read()`
+- `adc_cali_raw_to_voltage()`
+- `pcnt_unit_get_count()`
+- `pcnt_unit_clear_count()`
+- `ledc_set_duty()`
+- `ledc_update_duty()`
+
+You already use `ESP_ERROR_CHECK()` during initialization. Apply a consistent policy during runtime too:
+
+```c
+esp_err_t err = adc_oneshot_read(handle, channel, &raw);
+if (err != ESP_OK) {
+    ESP_LOGE(TAG, "ADC read failed: %s", esp_err_to_name(err));
+    return err;
+}
+```
+
+Avoid silently continuing with uninitialized or stale sensor values.
+
+For public functions, consider returning `esp_err_t` where failure is possible:
+
+```c
+esp_err_t get_battery_voltage_mv(int *voltage_mv);
+```
+
+## Add bounds and overflow protection
+
+The controller uses unconstrained arithmetic:
+
+```c
+p_result = ...
+pwm_real_A = PWM_BASE_VALUE + p_result;
+pwm_real_B = PWM_BASE_VALUE - p_result;
+```
+
+Clamp the control output before sending it to the motor driver. Also consider using `int32_t` or `int64_t` for intermediate calculations involving degrees, wheel circumference, and encoder counts.
+
+A reusable helper would be useful:
+
+```c
+static int clamp_int(int value, int min_value, int max_value);
+```
+
+Use it both in the controller and motor layer.
+
+## Improve the public headers
+
+`u_control.h` declares functions that do not appear to be implemented or used:
+
+```c
+init_my_timer();
+turn_left();
+turn_right();
+skip_junction();
+```
+
+Remove obsolete declarations or implement the API completely. Header files should describe the actual supported interface.
+
+The headers also do not document units. For example, make the units obvious:
+
+```c
+void maneuver_turn_degrees(int degrees);
+void maneuver_forward_steps(int target_steps);
+```
+
+For sensor APIs, use names such as `get_battery_voltage_mv()` consistently rather than mixing `mV`, capital letters, and abbreviations.
+
+## Add tests for pure logic
+
+There is currently no visible test coverage beyond the application firmware. Add tests for:
+
+1. Battery voltage → state-of-charge conversion:
+   - below minimum
+   - above maximum
+   - exact table values
+   - values between table entries
+2. PWM clamping:
+   - negative values
+   - zero
+   - normal values
+   - values above maximum
+3. Line-controller output:
+   - centered line
+   - line far left
+   - line far right
+   - all sensors inactive
+4. Maneuver completion:
+   - neither encoder reaches target
+   - only A reaches target
+   - only B reaches target
+   - both reach target
+
+The SOC function is an excellent first candidate because it should be completely hardware-independent.
+
+## Improve the main loop structure
+
+`main.c:38` contains one infinite loop with hard-coded behavior:
+
+```c
+turn(90);
+while (true)
+```
+
+Consider moving control-loop logic into a named task:
+
+```c
+static void control_task(void *arg);
+```
+
+Then define the update frequency explicitly, preferably with `vTaskDelayUntil()` rather than repeated `vTaskDelay()`:
+
+```c
+TickType_t last_wake = xTaskGetTickCount();
+
+for (;;) {
+    control_update();
+    vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(10));
+}
+```
+
+This gives you a more stable 100 Hz control loop.
+
+Also, code after the infinite loop is unreachable, including the battery debug call at `main.c:50`.
+
+## Use logging instead of raw `printf`
+
+Use ESP-IDF logging:
+
+```c
+static const char *TAG = "control";
+
+ESP_LOGI(TAG, "maneuver complete");
+ESP_LOGW(TAG, "encoder target not reached");
+ESP_LOGE(TAG, "ADC read failed");
+```
+
+This gives you log levels, module names, and better filtering than raw `printf()`.
+
+Avoid frequent logging inside the 10 ms control loop unless it is rate-limited; serial output can disturb timing.
+
+## Make configuration centralized
+
+Constants are spread across modules:
+
+- GPIO assignments
+- PWM frequency
+- sensor thresholds
+- controller gains
+- wheel geometry
+- encoder limits
+
+Create a configuration header or use Kconfig/project configuration for values that are likely to change during calibration. For example:
+
+```c
+#define CONTROL_LOOP_PERIOD_MS 10
+#define LINE_SENSOR_THRESHOLD_MV 2000
+#define LINE_CONTROLLER_BASE_PWM 200
+```
+
+Prefer names that include units. `MAX_RS_ERROR_VAL_P_CONTROLER` is difficult to interpret, while `LINE_ERROR_MAX_MV` is clearer.
+
+## Add compiler warnings and formatting
+
+Your `platformio.ini` currently contains no explicit warning policy. Add warnings gradually:
+
+```ini
+build_flags =
+    -Wall
+    -Wextra
+    -Wpedantic
+```
+
+Then fix warnings rather than suppressing them. Warnings would likely help detect:
+
+- missing standard-library includes for `abs()`
+- unused functions and variables
+- suspicious conversions
+- incorrect array bounds
+- declarations that do not match definitions
+
+Also adopt `clang-format` and format all C files consistently. Consistent formatting makes logic errors easier to spot in reviews.
+
+## Be careful with `volatile`
+
+The controller uses several `volatile static int` flags. `volatile` does not make access atomic or thread-safe. It only tells the compiler not to optimize away reads and writes.
+
+If the values are only accessed from one task, remove `volatile`. If they are shared between tasks or interrupt handlers, use:
+
+- FreeRTOS mutexes
+- critical sections
+- task notifications
+- atomics where appropriate
+
+Document which task owns the control state.
+
+## Suggested improvement order
+
+[x] Fix the encoder reset, motor stop, SOC bounds, SOC loop, SOC interpolation, and PWM clamping bugs.
+[x] Enable compiler warnings.
+[ ] Add tests for SOC conversion and controller calculations.
+[ ] Replace the multiple flags with a control-state enum.
+[ ] Separate control calculations from hardware I/O.
+[ ] Standardize names, units, headers, and logging.
+[ ] Convert the control loop into a fixed-period FreeRTOS task.
+[x] Move calibration values into centralized configuration.
+
+The most important practice for this project is: **treat every controller calculation and motor command as safety-critical code, and make it testable without hardware whenever possible.**

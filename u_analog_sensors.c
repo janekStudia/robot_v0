@@ -1,5 +1,7 @@
 #include "u_analog_sensors.h"
 
+#include "config.h"
+
 #include "esp_adc/adc_oneshot.h"
 #include "esp_adc/adc_cali.h"
 #include "esp_adc/adc_cali_scheme.h"
@@ -8,30 +10,10 @@
 
 #include "driver/gpio.h"
 
-// ADC1:
-#define SOC_ADC_CHANNEL ADC_CHANNEL_0
-#define REFLECTIVE_SENSOR_D1_CHANNEL ADC_CHANNEL_3
-#define REFLECTIVE_SENSOR_D2_CHANNEL ADC_CHANNEL_6
-#define REFLECTIVE_SENSOR_D3_CHANNEL ADC_CHANNEL_7
-#define REFLECTIVE_SENSOR_D4_CHANNEL ADC_CHANNEL_4
-#define REFLECTIVE_SENSOR_D5_CHANNEL ADC_CHANNEL_5
-
-// ADC2:
-#define REFLECTIVE_SENSOR_D6_CHANNEL ADC_CHANNEL_8
-#define REFLECTIVE_SENSOR_D7_CHANNEL ADC_CHANNEL_9
-#define REFLECTIVE_SENSOR_D8_CHANNEL ADC_CHANNEL_7
-
-#define NUM_OF_SENSOR_CHANNELS 8
-#define NUM_OF_CHANNELS_ADC1 6
-#define NUM_OF_CHANNELS_ADC2 3
-
-#define VOLTAGE_DIVIDER_BMS 3
-
-#define LED_ON_PIN GPIO_NUM_14
 #define LEDS_ENABLED 1
 #define LEDS_DISABLED 0
 
-#define MIN_RS_VALUE_TO_BE_ON_LINE 2000
+#define SOC_LOOKUP_SIZE 11
 
 static adc_oneshot_unit_handle_t adc1_handle = NULL;
 static adc_cali_handle_t adc1_cali_handle = NULL;
@@ -116,18 +98,18 @@ static adc_cali_handle_t get_cali_handle_adc2(void)
 
 static void rs_enable_leds(void)
 {
-  gpio_set_level(LED_ON_PIN, LEDS_ENABLED);
+  gpio_set_level(LINE_LED_ON_PIN, LEDS_ENABLED);
 }
 
 static void rs_disable_leds(void)
 {
-  gpio_set_level(LED_ON_PIN, LEDS_DISABLED);
+  gpio_set_level(LINE_LED_ON_PIN, LEDS_DISABLED);
 }
 
 static void init_led_on_pin()
 {
-  gpio_reset_pin(LED_ON_PIN);
-  gpio_set_direction(LED_ON_PIN, GPIO_MODE_OUTPUT);
+  gpio_reset_pin(LINE_LED_ON_PIN);
+  gpio_set_direction(LINE_LED_ON_PIN, GPIO_MODE_OUTPUT);
 }
 
 void init_both_adc_units(void)
@@ -153,7 +135,7 @@ int get_battery_voltage_mV(void)
 
 int get_soc_from_voltage(int voltage_mV)
 {
-  static const int lookup_soc[][2] = {
+  static const int lookup_soc[SOC_LOOKUP_SIZE][2] = {
       {6000 / VOLTAGE_DIVIDER_BMS, 0},
       {6900 / VOLTAGE_DIVIDER_BMS, 10},
       {7200 / VOLTAGE_DIVIDER_BMS, 20},
@@ -170,12 +152,12 @@ int get_soc_from_voltage(int voltage_mV)
   {
     return 0;
   }
-  if (voltage_mV >= lookup_soc[-1][0])
+  if (voltage_mV >= lookup_soc[SOC_LOOKUP_SIZE - 1][0])
   {
     return 100;
   }
 
-  for (int i = 0; i < sizeof(lookup_soc); i++)
+  for (int i = 0; i < SOC_LOOKUP_SIZE; i++)
   {
     if (voltage_mV > lookup_soc[i][0] && voltage_mV <= lookup_soc[i + 1][0])
     {
@@ -185,7 +167,7 @@ int get_soc_from_voltage(int voltage_mV)
       int y0 = lookup_soc[i][1];
       int y1 = lookup_soc[i + 1][1];
 
-      return y0 + ((y1 - y0) / (x1 - x0)) * (voltage_mV - x0);
+      return y0 + (((y1 - y0) * (voltage_mV - x0)) / (x1 - x0));
     }
   }
   return -1;
@@ -260,4 +242,4 @@ void update_line_sensor_table(int *line_sensor_table, int *line_mask_ptr, int *l
   rs_disable_leds();
 }
 
-// TODO dorobic do wszystkich funckji zwracajacych esp_ok akcje w przypadku kiedy nie wystapi esp_ok, co przekazac dalej? najlawtiej moze byc nie zwracac niczego z funkcji tylko pracowac na kopiach tak zeby nie trzeba bylo zwracac jakiejsc arbitralnej funkcji tylko zwrocic sukces porazka i w funkcji wywolujacej rozwiazywac sytuacje pojawienia sie bledu. Ewnetualnie jakies lepsze operaowanie na typach bledow. Generalnie trzeba bedzie uzbroic kod w przyszlosci.
+// [ ] dorobic do wszystkich funckji zwracajacych esp_ok akcje w przypadku kiedy nie wystapi esp_ok, co przekazac dalej? najlawtiej moze byc nie zwracac niczego z funkcji tylko pracowac na kopiach tak zeby nie trzeba bylo zwracac jakiejsc arbitralnej funkcji tylko zwrocic sukces porazka i w funkcji wywolujacej rozwiazywac sytuacje pojawienia sie bledu. Ewnetualnie jakies lepsze operaowanie na typach bledow. Generalnie trzeba bedzie uzbroic kod w przyszlosci.

@@ -1,8 +1,8 @@
 #include "u_indication_led.h"
 
-#include "driver/gpio.h"
+#include "config.h"
 
-#define INDICATION_LED_GPIO_NUM GPIO_NUM_2
+#include "driver/gpio.h"
 
 #define LED_ON 1
 #define LED_OFF 0

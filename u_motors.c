@@ -1,18 +1,11 @@
 #include "u_motors.h"
 
+#include "config.h"
+
 #include "driver/gpio.h"
 #include "driver/ledc.h"
 
 #include "esp_err.h"
-
-// pins configuration
-#define PWM_MA_GPIO GPIO_NUM_23
-#define AIN2_MC_PIN GPIO_NUM_22
-#define AIN1_MC_PIN GPIO_NUM_21
-#define STBY_MC_PIN GPIO_NUM_19
-#define BIN1_MC_PIN GPIO_NUM_18
-#define BIN2_MC_PIN GPIO_NUM_5
-#define PWM_MB_GPIO GPIO_NUM_17
 
 // pwm for motors configuration
 #define LEDC_TIMER LEDC_TIMER_0
@@ -139,15 +132,19 @@ void set_motor_B_backward(void)
 
 void set_motors_duty(int duty_A, int duty_B)
 {
-  // TODO przemyslec jak przelozyc wyjscie PID na duty_A i duty_B
   if (duty_A < 0)
   {
     duty_A = -duty_A;
-    set_motor_A_backward(); // TODO to moze obnizyc responsywnosc pwm
+    set_motor_A_backward();
   }
   else
   {
     set_motor_A_forward();
+  }
+
+  if (duty_A > MOTOR_PWM_FULL)
+  {
+    duty_A = MOTOR_PWM_FULL;
   }
 
   if (duty_B < 0)

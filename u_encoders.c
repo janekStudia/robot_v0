@@ -1,15 +1,12 @@
 #include "u_encoders.h"
 
+#include "config.h"
+
 #include "driver/gpio.h"
 #include "driver/pulse_cnt.h"
 
-#define ENCODER_A_PIN GPIO_NUM_16
-#define ENCODER_B_PIN GPIO_NUM_4
-
 #define PCNT_LOW_LIMIT -32768 // -2^15
 #define PCNT_HIGH_LIMIT 32767 // 2^15 - 1
-
-#define MAX_GLITCH_NS 1000
 
 #define UNUSED -1
 
@@ -69,7 +66,7 @@ int get_encB_count(void)
 void clear_both_encoders_count(void)
 {
   pcnt_unit_clear_count(encA_pcnt_handle);
-  pcnt_unit_clear_count(encA_pcnt_handle);
+  pcnt_unit_clear_count(encB_pcnt_handle);
 }
 
 void clear_encA_count(void)
