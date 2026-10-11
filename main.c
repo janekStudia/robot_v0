@@ -42,13 +42,12 @@ extern void app_main(void)
   // --- END INIT ---
 
   xTaskCreate(
-      control_task,   // Wskaźnik na funkcję zadania
-      "control_task", // Nazwa własna zadania (do debugowania)
-      2048,           // Rozmiar stosu w słowach/bajtach
-      NULL,           // Parametr przekazywany do zadania (arg)
-      5,              // Priorytet zadania (wyższy numer = wyższy priorytet)
-      NULL            // Uchwyt zadania (TaskHandle_t), opcjonalnie NULL
-  );
+      control_task,
+      "control_task",
+      2048,
+      NULL,
+      5,
+      NULL);
 
   vTaskDelay(pdMS_TO_TICKS(2000));
 

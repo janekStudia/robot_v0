@@ -14,6 +14,17 @@
 
 #define RS_DATA_TABLE_SIZE 8
 
+#define JUNCTION_NODES 7
+
+typedef enum
+{
+  FORWARD,
+  RIGHT,
+  BACKWARD,
+  LEFT,
+  GOAL_REACHED
+} direction_t;
+
 typedef enum
 {
   CONTROL_STATE_STOPPED,
@@ -45,6 +56,8 @@ static int pwm_A = 0;
 static int pwm_B = 0;
 
 // [ ] change pairs of values into structs
+
+static int route[JUNCTION_NODES] = {RIGHT, LEFT, LEFT, LEFT, BACKWARD, GOAL_REACHED, GOAL_REACHED};
 
 void uprint_rs_value_table()
 {
@@ -129,14 +142,28 @@ static void p_manoeuvre_controler(void)
   pwm_B = base_speed_pwm_B > 0 ? base_speed_pwm_B + p_result : base_speed_pwm_B - p_result;
 }
 
-static void manoeuvre_left(void)
+static void manoeuvre(direction_t direction)
 {
-  start_manoeuvre(11, -11, 400);
-}
+  switch (direction)
+  {
+  case FORWARD:
+    start_manoeuvre(5, 5, 200);
+    break;
+  case RIGHT:
+    start_manoeuvre(-10, 10, 200);
+    break;
+  case BACKWARD:
+    start_manoeuvre(-21, 21, 200);
+    break;
+  case LEFT:
+    start_manoeuvre(10, -10, 200);
+    break;
+  case GOAL_REACHED:
+    ESP_LOGE(TAG, "error, this should not be reached, E100\n");
 
-static void manoeuvre_right(void)
-{
-  start_manoeuvre(-11, 11, 400);
+  default:
+    break;
+  }
 }
 
 static void junction_detector(void)
@@ -145,7 +172,7 @@ static void junction_detector(void)
   {
     return;
   }
-
+  static int route_instruction_idx = 0;
   static int on_junction_counter = 0;
   if (rs_values_mask_popcount > 3) // is on junction
   {
@@ -156,10 +183,19 @@ static void junction_detector(void)
     on_junction_counter--; // decreases until 0 when out of junction to take care of residual counter values for future junctions
   }
 
-  if (on_junction_counter > 20)
+  if (on_junction_counter > 5)
   {
     // code for when on junction for sure
-    manoeuvre_left();
+    if (route_instruction_idx < JUNCTION_NODES && route[route_instruction_idx] != GOAL_REACHED)
+    {
+      manoeuvre(route[route_instruction_idx]);
+      route_instruction_idx++;
+    }
+    else if (route[route_instruction_idx] == GOAL_REACHED)
+    {
+      start_stopped_state();
+    }
+
     on_junction_counter = 0;
     return;
   }
@@ -208,6 +244,8 @@ void control_loop(void)
 
   p_manoeuvre_controler();
   check_steps();
+
+  // uprint_rs_value_table();
 
   update_pwm();
 }
