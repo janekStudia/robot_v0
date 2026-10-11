@@ -45,3 +45,4 @@
 // --- analog sensors setting
 #define VOLTAGE_DIVIDER_BMS 3
 #define MIN_RS_VALUE_TO_BE_ON_LINE 2000
+#define TIME_FOR_LEDS_TO_GET_STABILIZED 250

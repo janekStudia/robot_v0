@@ -29,7 +29,7 @@ static control_state_t control_state = CONTROL_STATE_STOPPED;
 // volatile static int p_manoeuvre_controler_enabled_flag = false;
 // volatile static int step_check_enabled_flag = false;
 
-// static const char *TAG = "u_control";
+static const char *TAG = "u_control";
 
 static int rs_values_table[RS_DATA_TABLE_SIZE] = {0};
 static int rs_values_mask = 0;

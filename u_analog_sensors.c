@@ -180,6 +180,9 @@ int get_soc(void)
 
 void update_line_sensor_table(int *line_sensor_table, int *line_mask_ptr, int *line_mask_popcount_ptr)
 {
+  rs_enable_leds();
+  esp_rom_delay_us(TIME_FOR_LEDS_TO_GET_STABILIZED);
+
   int local_mask = 0;
   int local_mask_popcount = 0;
 
@@ -221,9 +224,6 @@ void update_line_sensor_table(int *line_sensor_table, int *line_mask_ptr, int *l
       REFLECTIVE_SENSOR_D8_CHANNEL,
   };
 
-  rs_enable_leds();
-  esp_rom_delay_us(20);
-
   for (int i = 0; i < NUM_OF_SENSOR_CHANNELS; i++)
   {
     adc_oneshot_read(rs_unit_handles_table[i], rs_channels_table[i], &raw_adc_curr);
@@ -235,6 +235,7 @@ void update_line_sensor_table(int *line_sensor_table, int *line_mask_ptr, int *l
       local_mask_popcount++;
     }
     line_sensor_table[i] = voltage_mV_curr;
+    // [x] change to line above
   }
 
   *line_mask_ptr = local_mask;
